@@ -47,8 +47,8 @@ await app.command('led1', 'on');
 
 Each package includes its own README with purpose, goals, usage, and API examples:
 
-- [packages/contracts/README.md](/Users/sergio/Documents/App/gortjs-framework/packages/contracts/README.md)
-- [packages/events/README.md](/Users/sergio/Documents/App/gortjs-framework/packages/events/README.md)
-- [packages/devices/README.md](/Users/sergio/Documents/App/gortjs-framework/packages/devices/README.md)
-- [packages/core/README.md](/Users/sergio/Documents/App/gortjs-framework/packages/core/README.md)
-- [packages/rest/README.md](/Users/sergio/Documents/App/gortjs-framework/packages/rest/README.md)
+- [packages/contracts/README.md](https://github.com/Gazu/gortjs-framework/blob/main/packages/contracts/README.md)
+- [packages/events/README.md](https://github.com/Gazu/gortjs-framework/blob/main/packages/events/README.md)
+- [packages/devices/README.md](https://github.com/Gazu/gortjs-framework/blob/main/packages/devices/README.md)
+- [packages/core/README.md](https://github.com/Gazu/gortjs-framework/blob/main/packages/core/README.md)
+- [packages/rest/README.md](https://github.com/Gazu/gortjs-framework/blob/main/packages/rest/README.md)
