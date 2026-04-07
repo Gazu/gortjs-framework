@@ -1,0 +1,15 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "rootDir": "src",
+    "outDir": "dist",
+    "typeRoots": ["./src/types", "../../node_modules/@types"]
+  },
+  "references": [
+    { "path": "../contracts" },
+    { "path": "../devices" },
+    { "path": "../events" }
+  ],
+  "include": ["src/**/*.ts", "src/types/**/*.d.ts"]
+}

@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "dist",
+    "baseUrl": ".",
+    "paths": {
+      "@gortjs/contracts": ["packages/contracts/src"],
+      "@gortjs/events": ["packages/events/src"],
+      "@gortjs/devices": ["packages/devices/src"],
+      "@gortjs/core": ["packages/core/src"],
+      "@gortjs/rest": ["packages/rest/src"]
+    }
+  }
+}

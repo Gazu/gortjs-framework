@@ -1,0 +1,77 @@
+{
+  "devices": [
+    {
+      "id": "temp1",
+      "type": "temperature",
+      "pin": "A0",
+      "options": {
+        "freq": 1500,
+        "unit": "raw"
+      }
+    },
+    {
+      "id": "led1",
+      "type": "led",
+      "pin": 13
+    },
+    {
+      "id": "relay1",
+      "type": "relay",
+      "pin": 7
+    }
+  ],
+  "rules": [
+    {
+      "id": "high_temp_alert",
+      "eventName": "device:temp1:sensor:reading",
+      "cooldownMs": 250,
+      "condition": {
+        "path": "payload.value",
+        "operator": "gt",
+        "value": 60
+      },
+      "actions": [
+        {
+          "deviceId": "relay1",
+          "command": "open"
+        },
+        {
+          "deviceId": "led1",
+          "command": "on"
+        }
+      ]
+    },
+    {
+      "id": "normal_temp_alert",
+      "eventName": "device:temp1:sensor:reading",
+      "cooldownMs": 250,
+      "condition": {
+        "path": "payload.value",
+        "operator": "lte",
+        "value": 60
+      },
+      "actions": [
+        {
+          "deviceId": "relay1",
+          "command": "close"
+        },
+        {
+          "deviceId": "led1",
+          "command": "off"
+        }
+      ]
+    }
+  ],
+  "rest": {
+    "port": 3000,
+    "websocketPath": "/ws"
+  },
+  "persistence": {
+    "directory": "./apps/basic-app/data",
+    "eventLogFile": "events.jsonl",
+    "stateFile": "state.json",
+    "maxEvents": 500,
+    "rotateAfterBytes": 32768,
+    "maxBackups": 5
+  }
+}
