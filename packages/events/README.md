@@ -2,7 +2,7 @@
 
 `@gortjs/events` provides `EventBusContract` implementations for local and distributed event flows.
 
-Documented for release `0.2.0`.
+Documented for release `0.3.0`.
 
 ## Purpose
 
@@ -17,7 +17,7 @@ Documented for release `0.2.0`.
 - `RedisEventBus`: pub/sub transport powered by `redis`
 - `NoopEventBus`: no-op implementation for tests or dependency wiring
 
-## Why it matters in 0.2.0
+## Why it matters in 0.3.0
 
 - it supports the stronger runtime lifecycle introduced in `@gortjs/core`
 - it remains the common event surface for automation, persistence, and monitoring

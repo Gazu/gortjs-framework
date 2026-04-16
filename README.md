@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.2.0`
+Current documented release: `0.3.0`
 
 ## Core idea
 
@@ -20,14 +20,13 @@ Current documented release: `0.2.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.2.0
+## What changed in 0.3.0
 
-- Explicit application lifecycle with `attach`, `start`, `stop`, and `dispose`.
-- Stronger device and driver contracts for runtime introspection.
-- More capable device registry with type lookup and lifecycle-safe orchestration.
-- Runtime snapshots and enriched health reporting.
-- Better restart behavior for local development and long-running services.
-- Stable config validation, automation, persistence, and event transport foundations.
+- Complete runtime bootstrapping from configuration through `AppRuntime`.
+- Stable REST operations for status, snapshots, lifecycle, device registration, and rule management.
+- Config-driven runtime selection with `mock` or `johnny-five`.
+- Better support for full application loading from file-based config, including relative persistence paths.
+- Runtime and docs updated to reflect an operational `0.3.0` release.
 
 ## Quick start
 
@@ -41,25 +40,20 @@ npm start
 ## Minimal example
 
 ```ts
-import { IoTApp } from '@gortjs/core';
+import { AppRuntime } from '@gortjs/rest';
 
-const app = new IoTApp({ driver: 'mock' });
-
-app.registerDevice({
-  id: 'led1',
-  type: 'led',
-  pin: 13,
+const runtime = await AppRuntime.fromConfig({
+  runtime: { driver: 'mock' },
+  rest: { port: 3000, websocketPath: '/ws' },
+  devices: [{ id: 'led1', type: 'led', pin: 13 }],
 });
 
-await app.attach();
-await app.start();
-await app.command('led1', 'on');
+await runtime.start();
 
-console.log(app.getSnapshot());
-console.log(await app.getHealth());
+console.log(runtime.getApp().getSnapshot());
+console.log(runtime.getRestServer()?.getUrl());
 
-await app.stop();
-await app.dispose();
+await runtime.dispose();
 ```
 
 ## Typical use cases
