@@ -35,6 +35,8 @@ export class BoardManager {
   getHealth() {
     return {
       ready: this.ready,
+      driver: this.params.driver.name,
+      connected: this.params.driver.isConnected?.() ?? this.ready,
     };
   }
 }

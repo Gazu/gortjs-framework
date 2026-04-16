@@ -22,6 +22,12 @@ export interface EventBusHealth {
   implementation: string;
 }
 
+export interface SystemEventEnvelope<TPayload = Record<string, unknown>> {
+  source: 'app' | 'board' | 'device';
+  payload: TPayload;
+  timestamp: string;
+}
+
 export interface KnownEventPayloads {
   '*': EventHistoryEntry;
   'app:starting': Record<string, never>;

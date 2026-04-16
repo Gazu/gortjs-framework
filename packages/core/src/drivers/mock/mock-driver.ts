@@ -14,11 +14,22 @@ import { mockDeviceFactories } from './mock-device-factories';
 import { MockGenericComponent } from './devices/mock-generic-component';
 
 export class MockDriver implements DriverContract {
+  readonly name = 'mock';
+  private connected = false;
+
   constructor(private readonly factories: DeviceFactories = mockDeviceFactories) {}
 
-  async connect(): Promise<void> {}
+  async connect(): Promise<void> {
+    this.connected = true;
+  }
 
-  async disconnect(): Promise<void> {}
+  async disconnect(): Promise<void> {
+    this.connected = false;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
+  }
 
   createLed(params: CreateDeviceParams): LedDriver {
     return this.factories.led(params);

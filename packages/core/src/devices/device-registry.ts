@@ -41,21 +41,45 @@ export class DeviceRegistry {
     return Array.from(this.devices.values());
   }
 
+  has(deviceId: string): boolean {
+    return this.devices.has(deviceId);
+  }
+
+  unregister(deviceId: string): BaseDeviceContract {
+    const device = this.get(deviceId);
+    this.devices.delete(deviceId);
+    return device;
+  }
+
+  findByType(type: string): BaseDeviceContract[] {
+    return this.getAll().filter((device) => device.type === type);
+  }
+
+  count(): number {
+    return this.devices.size;
+  }
+
   async startAll(): Promise<void> {
     for (const device of this.devices.values()) {
-      await device.start();
+      if (device.canHandle('start')) {
+        await device.start();
+      }
     }
   }
 
   async stopAll(): Promise<void> {
     for (const device of this.devices.values()) {
-      await device.stop();
+      if (device.canHandle('stop')) {
+        await device.stop();
+      }
     }
   }
 
   async disposeAll(): Promise<void> {
     for (const device of this.devices.values()) {
-      await device.dispose();
+      if (device.canHandle('dispose')) {
+        await device.dispose();
+      }
     }
   }
 

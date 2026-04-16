@@ -34,6 +34,62 @@ test('registers motor devices from the default registry and executes typed comma
   await app.stop();
 });
 
+test('exposes an explicit lifecycle and supports restart after stop', async () => {
+  const app = new IoTApp({ driver: 'mock' });
+
+  app.registerDevice({
+    id: 'led1',
+    type: 'led',
+    pin: 13,
+  });
+
+  assert.equal(app.getStatus(), 'created');
+
+  await app.attach();
+  assert.equal(app.getStatus(), 'attached');
+
+  await app.start();
+  assert.equal(app.getStatus(), 'running');
+
+  await app.command('led1', 'on');
+  assert.equal(app.getDevice('led1').getState().state?.on, true);
+
+  await app.stop();
+  assert.equal(app.getStatus(), 'stopped');
+  assert.equal(app.getDevice('led1').getStatus(), 'stopped');
+
+  await app.start();
+  assert.equal(app.getStatus(), 'running');
+  assert.equal(app.getDevice('led1').getStatus(), 'ready');
+
+  await app.dispose();
+  assert.equal(app.getStatus(), 'disposed');
+  assert.equal(app.getDevice('led1').getStatus(), 'disposed');
+});
+
+test('exposes registry-backed snapshots with device types and rules', async () => {
+  const app = new IoTApp({ driver: 'mock' });
+
+  app.registerDevice({
+    id: 'relay1',
+    type: 'relay',
+    pin: 7,
+  });
+
+  app.registerRule({
+    id: 'turn_on_relay',
+    eventName: 'device:test',
+    actions: [{ deviceId: 'relay1', command: 'open' }],
+  });
+
+  const snapshot = app.getSnapshot();
+
+  assert.equal(snapshot.status, 'created');
+  assert.ok(snapshot.deviceTypes.includes('relay'));
+  assert.equal(snapshot.devices.length, 1);
+  assert.equal(snapshot.rules.length, 1);
+});
+
 test('supports generic Johnny-Five component device types through the mock driver', async () => {
   const app = new IoTApp({ driver: 'mock' });
 
@@ -277,7 +333,10 @@ test('reports deep health and rotates event logs with backups', async () => {
   const health = await app.getHealth();
   await app.stop();
 
+  assert.equal(health.app.status, 'running');
   assert.equal(health.board.ready, true);
+  assert.equal(health.board.driver, 'mock');
+  assert.equal(health.board.connected, true);
   assert.equal(health.persistence.enabled, true);
   assert.equal(health.persistence.initialized, true);
   assert.ok(health.persistence.backups.length > 0);
