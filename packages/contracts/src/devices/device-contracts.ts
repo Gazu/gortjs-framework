@@ -1,6 +1,12 @@
 import type { DriverContract } from '../drivers/driver-contracts';
 import type { EventBusContract } from '../events/event-bus-contract';
-import type { DeviceCommand, DeviceConfig, DeviceState } from './device-types';
+import type {
+  DeviceCommand,
+  DeviceConfig,
+  DeviceLifecycleAction,
+  DeviceState,
+  DeviceStatus,
+} from './device-types';
 
 export interface DeviceAttachContext {
   eventBus: EventBusContract;
@@ -15,6 +21,8 @@ export interface BaseDeviceContract {
   stop(): Promise<void>;
   dispose(): Promise<void>;
   getState(): DeviceState;
+  getStatus(): DeviceStatus;
+  canHandle(action: DeviceLifecycleAction): boolean;
 }
 
 export interface ActuatorDeviceContract extends BaseDeviceContract {

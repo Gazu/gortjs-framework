@@ -1,24 +1,14 @@
 # @gortjs/contracts
 
-`@gortjs/contracts` contains the shared contracts and type definitions used across GortJS. It is the foundation of the ecosystem and defines the common language between `core`, `devices`, `events`, and `rest`.
+`@gortjs/contracts` contains the shared contracts and type definitions used across GortJS. It defines the common language between `core`, `devices`, `events`, and `rest`.
+
+Documented for release `0.2.0`.
 
 ## Purpose
 
-- Centralize reusable interfaces and types.
-- Define contracts for devices, drivers, event buses, and persistence.
-- Reduce coupling between higher-level packages.
-
-## Goals
-
-- Provide a consistent TypeScript API for building extensions.
-- Make it easy to implement custom drivers and adapters.
-- Keep commands, events, and device state aligned across packages.
-
-## Installation
-
-```bash
-npm install @gortjs/contracts
-```
+- Centralize reusable interfaces and runtime types.
+- Define contracts for devices, drivers, event buses, persistence, and app health.
+- Keep packages decoupled while preserving a consistent TypeScript API.
 
 ## What it includes
 
@@ -26,10 +16,27 @@ npm install @gortjs/contracts
 - `DriverContract`
 - `BaseDeviceContract`
 - `DeviceCommand`
+- `DeviceState`
 - `IoTAppConfig`
+- `IoTAppHealth`
+- `IoTAppSnapshot`
 - `AutomationRule`
 - `PersistenceProvider`
 - `EventSerializer`
+
+## 0.2.0 contract additions
+
+- `IoTAppStatus` and `IoTAppSnapshot`
+- richer `IoTAppHealth` payloads
+- driver metadata with `name` and optional `isConnected()`
+- device lifecycle helpers such as `getStatus()` and `canHandle(...)`
+- lifecycle-oriented device status values including `disposed`
+
+## Installation
+
+```bash
+npm install @gortjs/contracts
+```
 
 ## Example
 
@@ -38,6 +45,7 @@ import type {
   DeviceCommand,
   DriverContract,
   EventBusContract,
+  IoTAppSnapshot,
 } from '@gortjs/contracts';
 
 const command: DeviceCommand = {
@@ -45,9 +53,15 @@ const command: DeviceCommand = {
   payload: { interval: 200 },
 };
 
-function attach(bus: EventBusContract, driver: DriverContract): void {
+function announceReady(
+  bus: EventBusContract,
+  driver: DriverContract,
+  snapshot: IoTAppSnapshot,
+): void {
   bus.emit('system:ready', {
-    driverAvailable: Boolean(driver),
+    driver: driver.name,
+    connected: driver.isConnected?.() ?? false,
+    devices: snapshot.devices.length,
   });
 }
 ```
@@ -57,6 +71,6 @@ function attach(bus: EventBusContract, driver: DriverContract): void {
 Use this package when you want to:
 
 - build a custom driver
-- type an external event transport
-- implement your own persistence provider
-- share contracts between backend, dashboard, and automation layers
+- create a custom event transport
+- implement a persistence provider
+- share runtime contracts between backend, dashboard, and automation services

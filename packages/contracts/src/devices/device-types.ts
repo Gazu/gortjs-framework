@@ -2,7 +2,8 @@ export type Cleanup = () => void;
 export type DevicePin = string | number;
 export type DevicePins = DevicePin[] | Record<string, DevicePin>;
 export type DeviceOptions = Record<string, unknown>;
-export type DeviceStatus = 'created' | 'attached' | 'ready' | 'stopped' | 'error';
+export type DeviceStatus = 'created' | 'attached' | 'ready' | 'stopped' | 'disposed' | 'error';
+export type DeviceLifecycleAction = 'attach' | 'start' | 'stop' | 'dispose';
 export type DeviceType = string;
 export type GenericComponentKind = 'sensor' | 'actuator' | 'hybrid';
 

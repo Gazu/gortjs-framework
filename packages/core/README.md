@@ -1,18 +1,23 @@
 # @gortjs/core
 
-`@gortjs/core` is the main GortJS runtime. It contains `IoTApp`, device registration, command dispatching, automation, persistence, health reporting, and hardware drivers.
+`@gortjs/core` is the main GortJS runtime package. It provides `IoTApp`, the built-in drivers, device orchestration, command dispatching, automation, persistence, configuration loading, and health reporting.
+
+Documented for release `0.2.0`.
 
 ## Purpose
 
-- Orchestrate devices, rules, events, and persistence.
-- Connect an application to real hardware or mocks.
-- Provide a simple entry point for building IoT applications.
+- Orchestrate devices, rules, events, and persistence in one runtime.
+- Run the same application logic with real hardware or simulation.
+- Provide a clean entry point for building modular IoT applications.
 
-## Goals
+## Highlights in 0.2.0
 
-- Keep the runtime modular and extensible.
-- Support local development with `mock` and deployment with `johnny-five`.
-- Provide built-in declarative automation, health checks, and persistence.
+- Explicit `IoTApp` lifecycle: `attach`, `start`, `stop`, `dispose`
+- Runtime status via `getStatus()`
+- Runtime snapshot via `getSnapshot()`
+- Lifecycle-aware device registry
+- Stronger driver introspection through `name` and `isConnected()`
+- Deep health reporting with board, event bus, and persistence details
 
 ## Installation
 
@@ -20,7 +25,7 @@
 npm install @gortjs/core @gortjs/contracts @gortjs/devices @gortjs/events
 ```
 
-## Main API
+## Main exports
 
 - `IoTApp`
 - `ConfigValidationError`
@@ -28,8 +33,11 @@ npm install @gortjs/core @gortjs/contracts @gortjs/devices @gortjs/events
 - `validateAppConfig`
 - `FilePersistence`
 - `HealthService`
+- `BoardManager`
+- `CommandDispatcher`
+- `DeviceRegistry`
 
-## Minimal example
+## Lifecycle example
 
 ```ts
 import { IoTApp } from '@gortjs/core';
@@ -42,8 +50,15 @@ app.registerDevice({
   pin: 7,
 });
 
+await app.attach();
 await app.start();
 await app.command('relay1', 'open');
+
+console.log(app.getStatus());
+console.log(app.getSnapshot());
+
+await app.stop();
+await app.dispose();
 ```
 
 ## Automation example
@@ -68,6 +83,8 @@ await app.configure({
     },
   ],
 });
+
+await app.start();
 ```
 
 ## File-based configuration example
@@ -76,6 +93,21 @@ await app.configure({
 import { IoTApp } from '@gortjs/core';
 
 const app = new IoTApp({ driver: 'mock' });
+
 await app.configureFromFile('./iot.config.json');
 await app.start();
 ```
+
+## Health example
+
+```ts
+const health = await app.getHealth();
+
+console.log(health.app.status);
+console.log(health.board.driver);
+console.log(health.board.connected);
+```
+
+## When to use this package
+
+Use `@gortjs/core` when you want the full application runtime: driver wiring, device orchestration, automation rules, config validation, persistence, and operational health.

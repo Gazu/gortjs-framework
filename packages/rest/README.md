@@ -2,23 +2,13 @@
 
 `@gortjs/rest` exposes an `IoTApp` instance over HTTP and WebSocket for control, observability, and live monitoring.
 
+Documented for release `0.2.0`.
+
 ## Purpose
 
-- Provide a simple API to inspect state and execute commands.
-- Expose health information and persisted data.
+- Provide an HTTP API to inspect runtime state and execute commands.
+- Expose operational health and persisted data.
 - Stream runtime events over WebSocket.
-
-## Goals
-
-- Reduce the amount of work required to publish an IoT runtime.
-- Offer a friendly interface for dashboards and external tools.
-- Keep the integration thin and focused around `IoTApp`.
-
-## Installation
-
-```bash
-npm install @gortjs/rest @gortjs/core
-```
 
 ## Main endpoints
 
@@ -32,6 +22,12 @@ npm install @gortjs/rest @gortjs/core
 - `GET /persisted-state`
 - `POST /devices/:id/commands`
 - `WS /ws`
+
+## Installation
+
+```bash
+npm install @gortjs/rest @gortjs/core
+```
 
 ## Example
 
@@ -57,6 +53,12 @@ const rest = new RestServer({
 
 await rest.start();
 ```
+
+## Why it matters in 0.2.0
+
+- it exposes the richer health model from `@gortjs/core`
+- it fits naturally on top of lifecycle-aware `IoTApp` instances
+- it gives dashboards and external services a thin operational interface
 
 ## curl example
 

@@ -59,8 +59,10 @@ export interface CreateComponentParams extends CreateDeviceParams {
 }
 
 export interface DriverContract {
+  readonly name: string;
   connect(): Promise<void>;
   disconnect?(): Promise<void>;
+  isConnected?(): boolean;
   createLed(params: CreateDeviceParams): LedDriver;
   createRelay(params: CreateDeviceParams): RelayDriver;
   createSensor(params: CreateDeviceParams): SensorDriver;
