@@ -2,7 +2,7 @@
 
 `@gortjs/contracts` contains the shared contracts and type definitions used across GortJS. It defines the common language between `core`, `devices`, `events`, and `rest`.
 
-Documented for release `0.2.0`.
+Documented for release `0.3.0`.
 
 ## Purpose
 
@@ -24,13 +24,14 @@ Documented for release `0.2.0`.
 - `PersistenceProvider`
 - `EventSerializer`
 
-## 0.2.0 contract additions
+## 0.3.0 contract additions
 
 - `IoTAppStatus` and `IoTAppSnapshot`
 - richer `IoTAppHealth` payloads
 - driver metadata with `name` and optional `isConnected()`
 - device lifecycle helpers such as `getStatus()` and `canHandle(...)`
 - lifecycle-oriented device status values including `disposed`
+- runtime config support through `IoTRuntimeConfig` and `RestServerConfig`
 
 ## Installation
 

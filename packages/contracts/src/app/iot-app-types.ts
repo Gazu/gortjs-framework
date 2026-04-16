@@ -5,6 +5,19 @@ import type { EventBusHealth } from '../events/event-types';
 import type { PersistenceConfig, PersistenceHealth } from '../persistence/persistence-types';
 
 export type IoTAppStatus = 'created' | 'attached' | 'running' | 'stopped' | 'disposed' | 'error';
+export type SupportedDriverName = 'johnny-five' | 'mock';
+
+export interface RestServerConfig {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  websocketPath?: string;
+}
+
+export interface IoTRuntimeConfig {
+  driver?: SupportedDriverName;
+  board?: Record<string, unknown>;
+}
 
 export interface IoTAppSnapshot {
   status: IoTAppStatus;
@@ -31,12 +44,10 @@ export interface IoTAppHealth {
 }
 
 export interface IoTAppConfig {
+  runtime?: IoTRuntimeConfig;
   devices?: DeviceConfig[];
   rules?: AutomationRule[];
-  rest?: {
-    port?: number;
-    websocketPath?: string;
-  };
+  rest?: RestServerConfig;
   persistence?: PersistenceConfig;
 }
 

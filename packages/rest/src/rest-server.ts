@@ -1,5 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
+import type { AutomationRule, DeviceConfig, IoTAppStatus } from '@gortjs/contracts';
 import { EventSerializer } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import { WebSocketServer } from 'ws';
@@ -13,6 +15,7 @@ export class RestServer {
   constructor(
     private readonly params: {
       app: IoTApp;
+      host?: string;
       port?: number;
       websocketPath?: string;
     }
@@ -22,6 +25,22 @@ export class RestServer {
   }
 
   private configureRoutes(): void {
+    this.expressApp.get('/status', (_req: Request, res: Response) => {
+      res.json({
+        status: this.params.app.getStatus(),
+        rest: {
+          running: this.isRunning(),
+          port: this.getPort(),
+          url: this.getUrl(),
+          websocketUrl: this.getWebSocketUrl(),
+        },
+      });
+    });
+
+    this.expressApp.get('/snapshot', (_req: Request, res: Response) => {
+      res.json(this.params.app.getSnapshot());
+    });
+
     this.expressApp.get('/health', async (_req: Request, res: Response) => {
       const health = await this.params.app.getHealth();
       res.json({
@@ -78,6 +97,24 @@ export class RestServer {
     });
 
     this.expressApp.post(
+      '/devices',
+      (
+        req: Request<unknown, unknown, DeviceConfig>,
+        res: Response,
+      ) => {
+        try {
+          const device = this.params.app.registerDevice(req.body);
+          res.status(201).json({ ok: true, device: device.getState() });
+        } catch (error) {
+          res.status(400).json({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      },
+    );
+
+    this.expressApp.post(
       '/devices/:id/commands',
       async (
         req: Request<{ id: string }, unknown, { command?: string; payload?: Record<string, unknown> }>,
@@ -100,11 +137,61 @@ export class RestServer {
         }
       }
     );
+
+    this.expressApp.post(
+      '/rules',
+      (
+        req: Request<unknown, unknown, AutomationRule>,
+        res: Response,
+      ) => {
+        try {
+          this.params.app.registerRule(req.body);
+          res.status(201).json({ ok: true, rules: this.params.app.getRules() });
+        } catch (error) {
+          res.status(400).json({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      },
+    );
+
+    this.expressApp.delete('/rules/:id', (req: Request<{ id: string }>, res: Response) => {
+      try {
+        this.params.app.unregisterRule(req.params.id);
+        res.json({ ok: true, rules: this.params.app.getRules() });
+      } catch (error) {
+        res.status(400).json({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    });
+
+    this.expressApp.post('/lifecycle/:action', async (req: Request<{ action: string }>, res: Response) => {
+      try {
+        const status = await this.performLifecycleAction(req.params.action);
+        res.json({
+          ok: true,
+          status,
+          snapshot: this.params.app.getSnapshot(),
+        });
+      } catch (error) {
+        res.status(400).json({
+          ok: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        });
+      }
+    });
   }
 
   async start(): Promise<void> {
     await new Promise<void>((resolve) => {
-      this.server = this.expressApp.listen(this.params.port ?? 3000, () => resolve());
+      this.server = this.expressApp.listen(
+        this.params.port ?? 3000,
+        this.params.host ?? '127.0.0.1',
+        () => resolve(),
+      );
     });
 
     this.websocketServer = new WebSocketServer({
@@ -154,5 +241,59 @@ export class RestServer {
         resolve();
       });
     });
+
+    this.server = undefined;
+  }
+
+  isRunning(): boolean {
+    return Boolean(this.server?.listening);
+  }
+
+  getPort(): number | undefined {
+    const address = this.server?.address();
+    if (!address || typeof address === 'string') {
+      return undefined;
+    }
+
+    return (address as AddressInfo).port;
+  }
+
+  getUrl(): string | undefined {
+    const port = this.getPort();
+    if (!port) {
+      return undefined;
+    }
+
+    return `http://${this.params.host ?? '127.0.0.1'}:${port}`;
+  }
+
+  getWebSocketUrl(): string | undefined {
+    const port = this.getPort();
+    if (!port) {
+      return undefined;
+    }
+
+    return `ws://${this.params.host ?? '127.0.0.1'}:${port}${this.params.websocketPath ?? '/ws'}`;
+  }
+
+  private async performLifecycleAction(action: string): Promise<IoTAppStatus> {
+    switch (action) {
+      case 'attach':
+        await this.params.app.attach();
+        break;
+      case 'start':
+        await this.params.app.start();
+        break;
+      case 'stop':
+        await this.params.app.stop();
+        break;
+      case 'dispose':
+        await this.params.app.dispose();
+        break;
+      default:
+        throw new Error(`Unsupported lifecycle action '${action}'`);
+    }
+
+    return this.params.app.getStatus();
   }
 }

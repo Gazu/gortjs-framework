@@ -1,6 +1,6 @@
 {
   "name": "@gortjs/basic-app",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
@@ -9,7 +9,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
-    "@gortjs/core": "0.2.0",
-    "@gortjs/rest": "0.2.0"
+    "@gortjs/core": "0.3.0",
+    "@gortjs/rest": "0.3.0"
   }
 }
