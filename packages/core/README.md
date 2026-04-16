@@ -2,7 +2,7 @@
 
 `@gortjs/core` is the main GortJS runtime package. It provides `IoTApp`, the built-in drivers, device orchestration, command dispatching, automation, persistence, configuration loading, and health reporting.
 
-Documented for release `0.3.0`.
+Documented for release `0.4.0`.
 
 ## Purpose
 
@@ -10,7 +10,7 @@ Documented for release `0.3.0`.
 - Run the same application logic with real hardware or simulation.
 - Provide a clean entry point for building modular IoT applications.
 
-## Highlights in 0.3.0
+## Highlights in 0.4.0
 
 - Explicit `IoTApp` lifecycle: `attach`, `start`, `stop`, `dispose`
 - Runtime status via `getStatus()`

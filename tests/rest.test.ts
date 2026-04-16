@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { generateKeyPairSync, createSign } from 'node:crypto';
 import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -59,8 +60,9 @@ async function waitForEvent(
 async function connectAndWaitForEvent(
   url: string,
   eventName: string,
+  options?: WebSocket.ClientOptions,
 ): Promise<{ socket: WebSocket; event: Record<string, unknown> }> {
-  const socket = new WebSocket(url);
+  const socket = new WebSocket(url, options);
 
   const eventPromise = waitForEvent(socket, eventName);
   await new Promise<void>((resolve, reject) => {
@@ -72,6 +74,32 @@ async function connectAndWaitForEvent(
     socket,
     event: await eventPromise,
   };
+}
+
+function base64UrlEncode(value: string): string {
+  return Buffer.from(value)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function signJwt(
+  privateKey: string,
+  payload: Record<string, unknown>,
+): string {
+  const header = { alg: 'RS256', typ: 'JWT' };
+  const encodedHeader = base64UrlEncode(JSON.stringify(header));
+  const encodedPayload = base64UrlEncode(JSON.stringify(payload));
+  const signer = createSign('RSA-SHA256');
+  signer.update(`${encodedHeader}.${encodedPayload}`);
+  signer.end();
+  const signature = signer.sign(privateKey, 'base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+
+  return `${encodedHeader}.${encodedPayload}.${signature}`;
 }
 
 test('AppRuntime boots a complete config and exposes operational REST and WebSocket endpoints', async () => {
@@ -226,5 +254,129 @@ test('REST lifecycle and mutation endpoints manage complete runtime configuratio
   assert.equal(deleteRuleResponse.status, 200);
   assert.equal((deleteRuleResponse.body as { rules: unknown[] }).rules.length, 0);
 
+  await runtime.dispose();
+});
+
+test('REST and WebSocket auth support static bearer tokens and scope enforcement', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-auth-static-'));
+  const runtime = await AppRuntime.fromConfig({
+    runtime: { driver: 'mock' },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+      auth: {
+        mode: 'static',
+        token: 'static-test-token',
+        tokenScopes: ['gortjs:read', 'gortjs:write', 'gortjs:stream'],
+        scopes: {
+          'status:read': ['gortjs:read'],
+          'devices:write': ['gortjs:write'],
+          'ws:connect': ['gortjs:stream'],
+          'lifecycle:write': ['gortjs:admin'],
+        },
+      },
+    },
+    persistence: { directory: persistenceDir },
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+  });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  const unauthorized = await requestJson(`${rest.getUrl()}/status`);
+  assert.equal(unauthorized.status, 401);
+
+  const authorized = await requestJson(`${rest.getUrl()}/status`, {
+    headers: { Authorization: 'Bearer static-test-token' },
+  });
+  assert.equal(authorized.status, 200);
+
+  const forbidden = await requestJson(`${rest.getUrl()}/lifecycle/stop`, {
+    method: 'POST',
+    headers: { Authorization: 'Bearer static-test-token' },
+  });
+  assert.equal(forbidden.status, 403);
+
+  const { socket } = await connectAndWaitForEvent(
+    `${rest.getWebSocketUrl()}?token=static-test-token`,
+    'ws:connected',
+  );
+  socket.close();
+  await runtime.dispose();
+});
+
+test('REST and WebSocket auth validate JWT signatures, claims, and scopes', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-auth-jwt-'));
+  const { privateKey, publicKey } = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  const token = signJwt(privateKey, {
+    iss: 'https://auth.gortjs.local',
+    aud: 'gortjs-basic-app',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    scope: 'gortjs:read gortjs:metrics gortjs:stream',
+  });
+
+  const runtime = await AppRuntime.fromConfig({
+    runtime: { driver: 'mock' },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+      auth: {
+        mode: 'jwt',
+        publicKey,
+        issuer: 'https://auth.gortjs.local',
+        audience: 'gortjs-basic-app',
+        scopeClaim: 'scope',
+        scopes: {
+          'status:read': ['gortjs:read'],
+          'metrics:read': ['gortjs:metrics'],
+          'ws:connect': ['gortjs:stream'],
+          'commands:write': ['gortjs:write'],
+        },
+      },
+    },
+    persistence: { directory: persistenceDir },
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+  });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  const statusResponse = await requestJson(`${rest.getUrl()}/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(statusResponse.status, 200);
+
+  const metricsResponse = await requestJson(`${rest.getUrl()}/metrics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  assert.equal(metricsResponse.status, 200);
+
+  const forbiddenCommand = await requestJson(`${rest.getUrl()}/devices/led1/commands`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ command: 'on' }),
+  });
+  assert.equal(forbiddenCommand.status, 403);
+
+  const { socket } = await connectAndWaitForEvent(
+    rest.getWebSocketUrl()!,
+    'ws:connected',
+    {
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    },
+  );
+  socket.close();
   await runtime.dispose();
 });

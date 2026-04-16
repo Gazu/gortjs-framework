@@ -4,7 +4,10 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { deviceEventNames, type DeviceEventEnvelope } from '@gortjs/contracts';
-import { ConfigValidationError, IoTApp } from '@gortjs/core';
+import { ConfigValidationError, IoTApp, MockDriver } from '@gortjs/core';
+import type { GortPlugin } from '@gortjs/core';
+import { AppRuntime } from '@gortjs/rest';
+import { LedDevice } from '@gortjs/devices';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -341,4 +344,118 @@ test('reports deep health and rotates event logs with backups', async () => {
   assert.equal(health.persistence.initialized, true);
   assert.ok(health.persistence.backups.length > 0);
   assert.ok(health.persistence.backups.length <= 2);
+});
+
+test('supports plugin-based drivers and device types through runtime profiles', async () => {
+  class LoopbackDriver extends MockDriver {
+    readonly name = 'loopback';
+  }
+
+  const plugin: GortPlugin = {
+    name: 'loopback-plugin',
+    register(api) {
+      api.registerDriver('loopback', () => new LoopbackDriver());
+      api.registerDeviceType('virtual-led', LedDevice);
+    },
+  };
+
+  const runtime = await AppRuntime.fromConfig({
+    runtime: {
+      profile: 'simulation',
+    },
+    profiles: {
+      simulation: {
+        runtime: {
+          driver: 'loopback',
+        },
+        rest: {
+          enabled: false,
+        },
+        plugins: [{ name: 'loopback-plugin' }],
+      },
+    },
+    devices: [
+      { id: 'virtual1', type: 'virtual-led', pin: 13 },
+    ],
+  }, { plugins: [plugin] });
+
+  await runtime.start();
+  const health = await runtime.getApp().getHealth();
+  assert.equal(health.board.driver, 'loopback');
+  assert.ok(runtime.getApp().getDeviceTypes().includes('virtual-led'));
+
+  await runtime.dispose();
+});
+
+test('supports compound rules, workflows, scheduling, metrics, and filtered event queries', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'iot-workflow-metrics-'));
+  const app = new IoTApp({
+    driver: 'mock',
+    persistence: {
+      directory: persistenceDir,
+      maxEvents: 100,
+    },
+  });
+
+  app.registerDevice({ id: 'led1', type: 'led', pin: 13 });
+  app.registerDevice({ id: 'relay1', type: 'relay', pin: 7 });
+
+  app.registerWorkflow({
+    id: 'relay_pulse',
+    steps: [
+      { type: 'command', deviceId: 'relay1', command: 'open' },
+      { type: 'delay', ms: 5 },
+      { type: 'command', deviceId: 'relay1', command: 'close' },
+    ],
+  });
+
+  app.registerWorkflow({
+    id: 'scheduled_led',
+    trigger: {
+      schedule: {
+        everyMs: 20,
+        runAtStartup: true,
+      },
+    },
+    steps: [
+      { type: 'command', deviceId: 'led1', command: 'on' },
+    ],
+  });
+
+  app.registerRule({
+    id: 'compound_led_rule',
+    eventName: deviceEventNames.commandExecuted('led1'),
+    conditions: [
+      { path: 'payload.command.name', operator: 'eq', value: 'on' },
+      { path: 'payload.state.state.on', operator: 'eq', value: true },
+    ],
+    conditionMatch: 'all',
+    actions: [
+      { type: 'workflow', workflowId: 'relay_pulse' },
+    ],
+  });
+
+  await app.start();
+  await sleep(30);
+  await app.command('led1', 'on');
+  await sleep(20);
+
+  const relayState = app.getDevice('relay1').getState();
+  assert.equal(relayState.state?.on, false);
+
+  const metrics = app.getMetrics();
+  assert.ok(metrics.commandsDispatched >= 2);
+  assert.ok(metrics.rulesExecuted >= 1);
+  assert.ok(metrics.workflowsExecuted >= 2);
+  assert.ok(metrics.scheduledExecutions >= 1);
+
+  const filteredEvents = app.queryEventHistory({
+    deviceId: 'led1',
+    page: 1,
+    pageSize: 5,
+  });
+  assert.ok(filteredEvents.total >= 1);
+  assert.ok(filteredEvents.events.some((event) => event.eventName.includes('led1')));
+
+  await app.stop();
 });

@@ -1,4 +1,4 @@
-import type { AutomationRule } from '../automation/automation-types';
+import type { AutomationRule, WorkflowDefinition } from '../automation/automation-types';
 import type { ConfigValidationIssue } from '../config/config-validation';
 import type { DeviceConfig, DeviceState } from '../devices/device-types';
 import type { EventBusHealth } from '../events/event-types';
@@ -6,17 +6,59 @@ import type { PersistenceConfig, PersistenceHealth } from '../persistence/persis
 
 export type IoTAppStatus = 'created' | 'attached' | 'running' | 'stopped' | 'disposed' | 'error';
 export type SupportedDriverName = 'johnny-five' | 'mock';
+export type RestAuthMode = 'static' | 'jwt';
+
+export interface RestAuthConfig {
+  enabled?: boolean;
+  mode: RestAuthMode;
+  token?: string;
+  tokenScopes?: string[];
+  publicKey?: string;
+  publicKeyFile?: string;
+  algorithms?: Array<'RS256'>;
+  issuer?: string;
+  audience?: string | string[];
+  scopeClaim?: string;
+  scopes?: Record<string, string[]>;
+}
 
 export interface RestServerConfig {
   enabled?: boolean;
   host?: string;
   port?: number;
   websocketPath?: string;
+  auth?: RestAuthConfig;
 }
 
 export interface IoTRuntimeConfig {
   driver?: SupportedDriverName;
   board?: Record<string, unknown>;
+  profile?: string;
+  metrics?: {
+    enabled?: boolean;
+  };
+}
+
+export interface PluginReferenceConfig {
+  name: string;
+  options?: Record<string, unknown>;
+}
+
+export interface RuntimeProfileConfig {
+  runtime?: Omit<IoTRuntimeConfig, 'profile'>;
+  rest?: RestServerConfig;
+  persistence?: PersistenceConfig;
+  plugins?: PluginReferenceConfig[];
+}
+
+export interface IoTAppMetrics {
+  appStarts: number;
+  appStops: number;
+  commandsDispatched: number;
+  eventsObserved: number;
+  rulesExecuted: number;
+  workflowsExecuted: number;
+  scheduledExecutions: number;
 }
 
 export interface IoTAppSnapshot {
@@ -24,6 +66,7 @@ export interface IoTAppSnapshot {
   deviceTypes: string[];
   devices: DeviceState[];
   rules: AutomationRule[];
+  workflows: WorkflowDefinition[];
 }
 
 export interface IoTAppHealth {
@@ -41,14 +84,18 @@ export interface IoTAppHealth {
   };
   eventBus: EventBusHealth;
   persistence: PersistenceHealth;
+  metrics: IoTAppMetrics;
 }
 
 export interface IoTAppConfig {
   runtime?: IoTRuntimeConfig;
+  profiles?: Record<string, RuntimeProfileConfig>;
   devices?: DeviceConfig[];
   rules?: AutomationRule[];
+  workflows?: WorkflowDefinition[];
   rest?: RestServerConfig;
   persistence?: PersistenceConfig;
+  plugins?: PluginReferenceConfig[];
 }
 
 export type ConfigValidationIssues = ConfigValidationIssue[];

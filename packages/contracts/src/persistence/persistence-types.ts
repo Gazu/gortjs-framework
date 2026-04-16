@@ -1,5 +1,5 @@
 import type { DeviceState } from '../devices/device-types';
-import type { EventHistoryEntry } from '../events/event-types';
+import type { EventHistoryEntry, EventHistoryPage, EventHistoryQuery } from '../events/event-types';
 
 export interface PersistenceConfig {
   directory: string;
@@ -35,6 +35,7 @@ export interface PersistenceProvider {
   initialize(): Promise<void>;
   dispose(): Promise<void>;
   getEventHistory(limit?: number): EventHistoryEntry[];
+  queryEventHistory?(query?: EventHistoryQuery): EventHistoryPage;
   getPersistedStates(): DeviceState[];
   getHealth(): Promise<PersistenceHealth>;
 }

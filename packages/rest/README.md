@@ -2,7 +2,7 @@
 
 `@gortjs/rest` exposes an `IoTApp` instance over HTTP and WebSocket for control, observability, and live monitoring.
 
-Documented for release `0.3.0`.
+Documented for release `0.4.0`.
 
 ## Purpose
 
@@ -49,7 +49,7 @@ const runtime = await AppRuntime.fromConfig({
 await runtime.start();
 ```
 
-## Why it matters in 0.3.0
+## Why it matters in 0.4.0
 
 - it exposes the richer health model from `@gortjs/core`
 - it fits naturally on top of lifecycle-aware `IoTApp` instances

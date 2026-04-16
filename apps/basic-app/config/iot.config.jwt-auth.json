@@ -1,0 +1,110 @@
+{
+  "runtime": {
+    "driver": "mock"
+  },
+  "devices": [
+    {
+      "id": "temp1",
+      "type": "temperature",
+      "pin": "A0",
+      "options": {
+        "freq": 1500,
+        "unit": "raw"
+      }
+    },
+    {
+      "id": "led1",
+      "type": "led",
+      "pin": 13
+    },
+    {
+      "id": "relay1",
+      "type": "relay",
+      "pin": 7
+    }
+  ],
+  "rules": [
+    {
+      "id": "high_temp_alert",
+      "eventName": "device:temp1:sensor:reading",
+      "cooldownMs": 250,
+      "conditions": [
+        {
+          "path": "payload.value",
+          "operator": "gt",
+          "value": 60
+        },
+        {
+          "path": "deviceId",
+          "operator": "eq",
+          "value": "temp1"
+        }
+      ],
+      "conditionMatch": "all",
+      "actions": [
+        {
+          "type": "workflow",
+          "workflowId": "raise_alarm"
+        }
+      ]
+    }
+  ],
+  "workflows": [
+    {
+      "id": "raise_alarm",
+      "steps": [
+        {
+          "type": "command",
+          "deviceId": "relay1",
+          "command": "open"
+        },
+        {
+          "type": "delay",
+          "ms": 250
+        },
+        {
+          "type": "command",
+          "deviceId": "led1",
+          "command": "on"
+        }
+      ]
+    }
+  ],
+  "rest": {
+    "port": 3000,
+    "websocketPath": "/ws",
+    "auth": {
+      "mode": "jwt",
+      "publicKeyFile": "../keys/jwt-public.pem",
+      "issuer": "https://auth.gortjs.local",
+      "audience": "gortjs-basic-app",
+      "scopeClaim": "scope",
+      "scopes": {
+        "status:read": ["gortjs:read"],
+        "snapshot:read": ["gortjs:read"],
+        "health:read": ["gortjs:read"],
+        "health:deep:read": ["gortjs:read"],
+        "metrics:read": ["gortjs:metrics"],
+        "devices:read": ["gortjs:read"],
+        "device-types:read": ["gortjs:read"],
+        "rules:read": ["gortjs:read"],
+        "workflows:read": ["gortjs:read"],
+        "events:read": ["gortjs:read"],
+        "persisted-state:read": ["gortjs:read"],
+        "devices:write": ["gortjs:write"],
+        "commands:write": ["gortjs:write"],
+        "rules:write": ["gortjs:write"],
+        "lifecycle:write": ["gortjs:admin"],
+        "ws:connect": ["gortjs:stream"]
+      }
+    }
+  },
+  "persistence": {
+    "directory": "../data",
+    "eventLogFile": "events.jsonl",
+    "stateFile": "state.json",
+    "maxEvents": 500,
+    "rotateAfterBytes": 32768,
+    "maxBackups": 5
+  }
+}

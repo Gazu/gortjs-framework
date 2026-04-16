@@ -7,11 +7,15 @@ import type {
   DriverContract,
   EventBusContract,
   EventHistoryEntry,
+  EventHistoryPage,
+  EventHistoryQuery,
   IoTAppHealth,
   IoTAppConfig,
+  IoTAppMetrics,
   IoTAppSnapshot,
   IoTAppStatus,
   SupportedDriverName,
+  WorkflowDefinition,
   PersistenceProvider,
   PersistenceConfig,
 } from '@gortjs/contracts';
@@ -29,6 +33,7 @@ import {
   ThermometerDevice,
 } from '@gortjs/devices';
 import { RuleEngine } from './automation/rule-engine';
+import { WorkflowEngine } from './automation/workflow-engine';
 import { BoardManager } from './board/board-manager';
 import { CommandDispatcher } from './commands/command-dispatcher';
 import { loadAppConfig } from './config/load-app-config';
@@ -39,6 +44,7 @@ import { JohnnyFiveDriver } from './drivers/johnny-five/johnny-five-driver';
 import { johnnyFiveComponentConstructors } from './drivers/johnny-five/johnny-five-component-registry';
 import { MockDriver } from './drivers/mock/mock-driver';
 import { HealthService } from './health/health-service';
+import { AppMetricsService } from './metrics/app-metrics';
 import { FilePersistence } from './persistence/file-persistence';
 
 const DEFAULT_DEVICE_TYPES: Record<string, DeviceConstructor> = {
@@ -63,6 +69,7 @@ type IoTAppOptions = {
   persistence?: PersistenceConfig;
   persistenceProvider?: PersistenceProvider;
   rules?: AutomationRule[];
+  workflows?: WorkflowDefinition[];
 };
 
 export class IoTApp {
@@ -74,7 +81,9 @@ export class IoTApp {
   private readonly commandDispatcher: CommandDispatcher;
   private readonly deviceTypeRegistry: DeviceTypeRegistry;
   private readonly ruleEngine: RuleEngine;
+  private readonly workflowEngine: WorkflowEngine;
   private readonly healthService: HealthService;
+  private readonly metrics: AppMetricsService;
   private persistence?: PersistenceProvider;
 
   constructor(
@@ -84,19 +93,42 @@ export class IoTApp {
     this.boardManager = new BoardManager({ driver: this.driver, eventBus: this.eventBus });
     this.registry = new DeviceRegistry({ driver: this.driver, eventBus: this.eventBus });
     this.commandDispatcher = new CommandDispatcher({ registry: this.registry, eventBus: this.eventBus });
+    this.metrics = new AppMetricsService();
     this.ruleEngine = new RuleEngine({
       eventBus: this.eventBus,
       executeCommand: (deviceId, command, payload) => this.command(deviceId, command, payload),
+      executeWorkflow: (workflowId, input) => this.executeWorkflow(workflowId, input),
+      onRuleExecuted: () => this.metrics.increment('rulesExecuted'),
+    });
+    this.workflowEngine = new WorkflowEngine({
+      eventBus: this.eventBus,
+      executeCommand: (deviceId, command, payload) => this.command(deviceId, command, payload),
+      executeWorkflowById: (workflowId, input) => this.executeWorkflow(workflowId, input),
+      emitEvent: (eventName, payload) => this.eventBus.emit(eventName, payload),
+      canRun: () => this.status === 'running',
+      onWorkflowExecuted: (_workflowId, source) => {
+        this.metrics.increment('workflowsExecuted');
+        if (source === 'schedule') {
+          this.metrics.increment('scheduledExecutions');
+        }
+      },
     });
     this.deviceTypeRegistry = new DeviceTypeRegistry({
       ...DEFAULT_DEVICE_TYPES,
       ...(options.deviceTypes ?? {}),
     });
 
+    this.eventBus.on('*', () => {
+      this.metrics.increment('eventsObserved');
+    });
+
     this.enablePersistence(options.persistence, options.persistenceProvider);
 
     if (options.rules?.length) {
       this.ruleEngine.registerMany(options.rules);
+    }
+    if (options.workflows?.length) {
+      this.workflowEngine.registerMany(options.workflows);
     }
 
     this.healthService = new HealthService({
@@ -105,8 +137,10 @@ export class IoTApp {
       registry: this.registry,
       deviceTypeRegistry: this.deviceTypeRegistry,
       ruleEngine: this.ruleEngine,
+      workflowEngine: this.workflowEngine,
       getPersistence: () => this.persistence,
       getAppStatus: () => this.status,
+      getMetrics: () => this.getMetrics(),
     });
   }
 
@@ -115,6 +149,7 @@ export class IoTApp {
       driver: config.runtime?.driver ?? 'johnny-five',
       board: config.runtime?.board,
       persistence: config.persistence,
+      workflows: config.workflows,
     });
   }
 
@@ -146,6 +181,26 @@ export class IoTApp {
     this.ruleEngine.registerMany(rules);
   }
 
+  registerWorkflow(workflow: WorkflowDefinition): void {
+    this.assertMutable('register workflows');
+    this.workflowEngine.register(workflow);
+  }
+
+  registerWorkflows(workflows: WorkflowDefinition[]): void {
+    this.assertMutable('register workflows');
+    this.workflowEngine.registerMany(workflows);
+  }
+
+  unregisterWorkflow(workflowId: string): void {
+    this.assertMutable('unregister workflows');
+    this.workflowEngine.unregister(workflowId);
+  }
+
+  clearWorkflows(): void {
+    this.assertMutable('clear workflows');
+    this.workflowEngine.clear();
+  }
+
   unregisterRule(ruleId: string): void {
     this.assertMutable('unregister rules');
     this.ruleEngine.unregister(ruleId);
@@ -158,6 +213,10 @@ export class IoTApp {
 
   getRules(): AutomationRule[] {
     return this.ruleEngine.list();
+  }
+
+  getWorkflows(): WorkflowDefinition[] {
+    return this.workflowEngine.list();
   }
 
   getDevice(deviceId: string): BaseDeviceContract {
@@ -195,6 +254,9 @@ export class IoTApp {
     if (config.rules?.length) {
       this.registerRules(config.rules);
     }
+    if (config.workflows?.length) {
+      this.registerWorkflows(config.workflows);
+    }
   }
 
   async configureFromFile(filePath: string): Promise<IoTAppConfig> {
@@ -223,7 +285,12 @@ export class IoTApp {
     command: DeviceCommand | string,
     payload: Record<string, unknown> = {},
   ) {
+    this.metrics.increment('commandsDispatched');
     return this.commandDispatcher.dispatch(deviceId, command, payload);
+  }
+
+  async executeWorkflow(workflowId: string, input?: Record<string, unknown>): Promise<void> {
+    return this.workflowEngine.execute(workflowId, input);
   }
 
   async start(): Promise<void> {
@@ -242,6 +309,7 @@ export class IoTApp {
     await this.persistence?.initialize();
     await this.boardManager.start();
     await this.registry.startAll();
+    this.metrics.increment('appStarts');
     this.status = 'running';
     this.eventBus.emit(appEventNames.ready, {
       devices: this.getDevices(),
@@ -258,6 +326,7 @@ export class IoTApp {
     await this.registry.stopAll();
     await this.boardManager.stop();
     await this.persistence?.dispose();
+    this.metrics.increment('appStops');
     this.status = 'stopped';
   }
 
@@ -267,6 +336,8 @@ export class IoTApp {
     }
 
     await this.stop();
+    this.ruleEngine.clear();
+    this.workflowEngine.clear();
     await this.registry.disposeAll();
     this.status = 'disposed';
   }
@@ -275,12 +346,26 @@ export class IoTApp {
     return this.persistence?.getEventHistory(limit) ?? [];
   }
 
+  queryEventHistory(query?: EventHistoryQuery): EventHistoryPage {
+    return this.persistence?.queryEventHistory?.(query) ?? {
+      events: this.getEventHistory(query?.pageSize),
+      total: this.getEventHistory().length,
+      page: query?.page ?? 1,
+      pageSize: query?.pageSize ?? this.getEventHistory().length,
+      hasNextPage: false,
+    };
+  }
+
   getPersistedDeviceStates() {
     return this.persistence?.getPersistedStates() ?? [];
   }
 
   async getHealth(): Promise<IoTAppHealth> {
     return this.healthService.getHealth();
+  }
+
+  getMetrics(): IoTAppMetrics {
+    return this.metrics.snapshot();
   }
 
   getStatus(): IoTAppStatus {
@@ -293,6 +378,7 @@ export class IoTApp {
       devices: this.getDevices(),
       deviceTypes: this.getDeviceTypes(),
       rules: this.getRules(),
+      workflows: this.getWorkflows(),
     };
   }
 

@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.3.0`
+Current documented release: `0.4.0`
 
 ## Core idea
 
@@ -20,13 +20,13 @@ Current documented release: `0.3.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.3.0
+## What changed in 0.4.0
 
 - Complete runtime bootstrapping from configuration through `AppRuntime`.
 - Stable REST operations for status, snapshots, lifecycle, device registration, and rule management.
 - Config-driven runtime selection with `mock` or `johnny-five`.
 - Better support for full application loading from file-based config, including relative persistence paths.
-- Runtime and docs updated to reflect an operational `0.3.0` release.
+- Runtime and docs updated to reflect an operational `0.4.0` release.
 
 ## Quick start
 
