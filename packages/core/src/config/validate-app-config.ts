@@ -163,14 +163,48 @@ export function validateAppConfig(
       issues.push({ path: 'rest', message: 'must be an object when provided' });
     } else {
       if (
-        typeof config.rest.port !== 'undefined'
-        && (typeof config.rest.port !== 'number' || !Number.isInteger(config.rest.port) || config.rest.port <= 0)
+        typeof config.rest.enabled !== 'undefined'
+        && typeof config.rest.enabled !== 'boolean'
       ) {
-        issues.push({ path: 'rest.port', message: 'must be a positive integer' });
+        issues.push({ path: 'rest.enabled', message: 'must be a boolean' });
+      }
+
+      if (typeof config.rest.host !== 'undefined' && typeof config.rest.host !== 'string') {
+        issues.push({ path: 'rest.host', message: 'must be a string' });
+      }
+
+      if (
+        typeof config.rest.port !== 'undefined'
+        && (typeof config.rest.port !== 'number' || !Number.isInteger(config.rest.port) || config.rest.port < 0)
+      ) {
+        issues.push({ path: 'rest.port', message: 'must be a non-negative integer' });
       }
 
       if (typeof config.rest.websocketPath !== 'undefined' && typeof config.rest.websocketPath !== 'string') {
         issues.push({ path: 'rest.websocketPath', message: 'must be a string' });
+      }
+    }
+  }
+
+  if (typeof config.runtime !== 'undefined') {
+    if (!isPlainObject(config.runtime)) {
+      issues.push({ path: 'runtime', message: 'must be an object when provided' });
+    } else {
+      if (
+        typeof config.runtime.driver !== 'undefined'
+        && !['mock', 'johnny-five'].includes(String(config.runtime.driver))
+      ) {
+        issues.push({
+          path: 'runtime.driver',
+          message: "must be one of 'mock' or 'johnny-five'",
+        });
+      }
+
+      if (
+        typeof config.runtime.board !== 'undefined'
+        && !isPlainObject(config.runtime.board)
+      ) {
+        issues.push({ path: 'runtime.board', message: 'must be an object when provided' });
       }
     }
   }

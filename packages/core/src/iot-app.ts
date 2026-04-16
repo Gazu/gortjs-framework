@@ -11,6 +11,7 @@ import type {
   IoTAppConfig,
   IoTAppSnapshot,
   IoTAppStatus,
+  SupportedDriverName,
   PersistenceProvider,
   PersistenceConfig,
 } from '@gortjs/contracts';
@@ -54,7 +55,7 @@ const DEFAULT_DEVICE_TYPES: Record<string, DeviceConstructor> = {
 };
 
 type IoTAppOptions = {
-  driver?: 'johnny-five' | 'mock';
+  driver?: SupportedDriverName;
   driverInstance?: DriverContract;
   eventBus?: EventBusContract;
   board?: Record<string, unknown>;
@@ -109,6 +110,14 @@ export class IoTApp {
     });
   }
 
+  static fromConfig(config: IoTAppConfig): IoTApp {
+    return new IoTApp({
+      driver: config.runtime?.driver ?? 'johnny-five',
+      board: config.runtime?.board,
+      persistence: config.persistence,
+    });
+  }
+
   on(eventName: string, handler: (payload: unknown) => void): () => void {
     return this.eventBus.on(eventName, handler);
   }
@@ -135,6 +144,16 @@ export class IoTApp {
 
   registerRules(rules: AutomationRule[]): void {
     this.ruleEngine.registerMany(rules);
+  }
+
+  unregisterRule(ruleId: string): void {
+    this.assertMutable('unregister rules');
+    this.ruleEngine.unregister(ruleId);
+  }
+
+  clearRules(): void {
+    this.assertMutable('clear rules');
+    this.ruleEngine.clear();
   }
 
   getRules(): AutomationRule[] {

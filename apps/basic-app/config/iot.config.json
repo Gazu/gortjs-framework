@@ -1,4 +1,7 @@
 {
+  "runtime": {
+    "driver": "mock"
+  },
   "devices": [
     {
       "id": "temp1",
@@ -67,7 +70,7 @@
     "websocketPath": "/ws"
   },
   "persistence": {
-    "directory": "./apps/basic-app/data",
+    "directory": "../data",
     "eventLogFile": "events.jsonl",
     "stateFile": "state.json",
     "maxEvents": 500,
