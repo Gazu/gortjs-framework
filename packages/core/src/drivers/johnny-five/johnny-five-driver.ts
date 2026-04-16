@@ -32,7 +32,9 @@ function resolveJohnnyFiveConstructor(componentClass: string): new (options?: un
 }
 
 export class JohnnyFiveDriver implements DriverContract {
+  readonly name = 'johnny-five';
   private board?: InstanceType<typeof five.Board>;
+  private connected = false;
 
   constructor(
     private readonly options: { board?: Record<string, unknown> } = {},
@@ -42,13 +44,21 @@ export class JohnnyFiveDriver implements DriverContract {
   async connect(): Promise<void> {
     await new Promise<void>((resolve, reject) => {
       this.board = new five.Board(this.options.board ?? {});
-      this.board.on('ready', () => resolve());
+      this.board.on('ready', () => {
+        this.connected = true;
+        resolve();
+      });
       this.board.on('error', (error?: Error) => reject(error ?? new Error('Board error')));
     });
   }
 
   async disconnect(): Promise<void> {
+    this.connected = false;
     this.board = undefined;
+  }
+
+  isConnected(): boolean {
+    return this.connected;
   }
 
   createLed(params: CreateDeviceParams): LedDriver {

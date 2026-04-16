@@ -9,6 +9,8 @@ import type {
   EventHistoryEntry,
   IoTAppHealth,
   IoTAppConfig,
+  IoTAppSnapshot,
+  IoTAppStatus,
   PersistenceProvider,
   PersistenceConfig,
 } from '@gortjs/contracts';
@@ -63,6 +65,7 @@ type IoTAppOptions = {
 };
 
 export class IoTApp {
+  private status: IoTAppStatus = 'created';
   private readonly eventBus: EventBusContract;
   private readonly driver: DriverContract;
   private readonly boardManager: BoardManager;
@@ -102,6 +105,7 @@ export class IoTApp {
       deviceTypeRegistry: this.deviceTypeRegistry,
       ruleEngine: this.ruleEngine,
       getPersistence: () => this.persistence,
+      getAppStatus: () => this.status,
     });
   }
 
@@ -114,6 +118,7 @@ export class IoTApp {
   }
 
   registerDevice(config: DeviceConfig): BaseDeviceContract {
+    this.assertMutable('register devices');
     const DeviceClass = this.deviceTypeRegistry.get(config.type);
     if (!DeviceClass) {
       throw new Error(`Unknown device type '${config.type}'`);
@@ -124,6 +129,7 @@ export class IoTApp {
   }
 
   registerRule(rule: AutomationRule): void {
+    this.assertMutable('register rules');
     this.ruleEngine.register(rule);
   }
 
@@ -148,10 +154,12 @@ export class IoTApp {
   }
 
   registerDeviceType(type: string, deviceConstructor: DeviceConstructor): void {
+    this.assertMutable('register device types');
     this.deviceTypeRegistry.register(type, deviceConstructor);
   }
 
   async configure(config: IoTAppConfig): Promise<void> {
+    this.assertMutable('configure the app');
     validateAppConfig(
       config,
       Object.fromEntries(
@@ -181,6 +189,16 @@ export class IoTApp {
     return config;
   }
 
+  async attach(): Promise<void> {
+    if (this.status === 'disposed') {
+      throw new Error('Cannot attach a disposed IoTApp');
+    }
+
+    if (this.status === 'created' || this.status === 'stopped') {
+      this.status = 'attached';
+    }
+  }
+
   async command(
     deviceId: string,
     command: DeviceCommand | string,
@@ -190,9 +208,22 @@ export class IoTApp {
   }
 
   async start(): Promise<void> {
+    if (this.status === 'disposed') {
+      throw new Error('Cannot start a disposed IoTApp');
+    }
+
+    if (this.status === 'running') {
+      return;
+    }
+
+    if (this.status === 'created') {
+      await this.attach();
+    }
+
     await this.persistence?.initialize();
     await this.boardManager.start();
     await this.registry.startAll();
+    this.status = 'running';
     this.eventBus.emit(appEventNames.ready, {
       devices: this.getDevices(),
       deviceTypes: this.getDeviceTypes(),
@@ -200,9 +231,25 @@ export class IoTApp {
   }
 
   async stop(): Promise<void> {
-    await this.registry.disposeAll();
+    if (this.status === 'disposed' || this.status === 'stopped' || this.status === 'created') {
+      this.status = this.status === 'created' ? 'stopped' : this.status;
+      return;
+    }
+
+    await this.registry.stopAll();
     await this.boardManager.stop();
     await this.persistence?.dispose();
+    this.status = 'stopped';
+  }
+
+  async dispose(): Promise<void> {
+    if (this.status === 'disposed') {
+      return;
+    }
+
+    await this.stop();
+    await this.registry.disposeAll();
+    this.status = 'disposed';
   }
 
   getEventHistory(limit?: number): EventHistoryEntry[] {
@@ -215,6 +262,29 @@ export class IoTApp {
 
   async getHealth(): Promise<IoTAppHealth> {
     return this.healthService.getHealth();
+  }
+
+  getStatus(): IoTAppStatus {
+    return this.status;
+  }
+
+  getSnapshot(): IoTAppSnapshot {
+    return {
+      status: this.status,
+      devices: this.getDevices(),
+      deviceTypes: this.getDeviceTypes(),
+      rules: this.getRules(),
+    };
+  }
+
+  private assertMutable(action: string): void {
+    if (this.status === 'running') {
+      throw new Error(`Cannot ${action} while the IoTApp is running`);
+    }
+
+    if (this.status === 'disposed') {
+      throw new Error(`Cannot ${action} after the IoTApp has been disposed`);
+    }
   }
 
   private enablePersistence(config?: PersistenceConfig, provider?: PersistenceProvider): void {

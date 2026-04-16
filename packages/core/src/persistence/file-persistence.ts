@@ -78,6 +78,7 @@ export class FilePersistence implements PersistenceProvider {
     this.cleanup?.();
     this.cleanup = undefined;
     await this.writeQueue;
+    this.initialized = false;
   }
 
   getEventHistory(limit = this.maxEvents): EventHistoryEntry[] {

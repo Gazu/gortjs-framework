@@ -43,6 +43,25 @@ export abstract class BaseDevice implements BaseDeviceContract {
     this.status = 'attached';
   }
 
+  getStatus(): DeviceStatus {
+    return this.status;
+  }
+
+  canHandle(action: 'attach' | 'start' | 'stop' | 'dispose'): boolean {
+    switch (action) {
+      case 'attach':
+        return this.status === 'created';
+      case 'start':
+        return this.status === 'attached' || this.status === 'stopped';
+      case 'stop':
+        return this.status === 'ready';
+      case 'dispose':
+        return this.status !== 'created' && this.status !== 'disposed';
+      default:
+        return false;
+    }
+  }
+
   protected emit<TPayload extends Record<string, unknown>>(
     eventName: string,
     payload: TPayload,
@@ -79,6 +98,7 @@ export abstract class BaseDevice implements BaseDeviceContract {
 
   async dispose(): Promise<void> {
     await this.stop();
+    this.status = 'disposed';
     this.instance = undefined;
   }
 

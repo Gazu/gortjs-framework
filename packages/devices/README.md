@@ -2,29 +2,32 @@
 
 `@gortjs/devices` contains the GortJS device model: base classes, actuators, sensors, and generic component devices.
 
+Documented for release `0.2.0`.
+
 ## Purpose
 
-- Represent the IoT domain through reusable classes.
-- Encapsulate behavior per device type.
-- Separate device logic from hardware-specific implementations.
-
-## Goals
-
-- Keep the domain layer clear and extensible.
-- Provide strong typed devices for high-priority components.
-- Preserve broad hardware coverage through `GenericComponentDevice`.
-
-## Installation
-
-```bash
-npm install @gortjs/devices @gortjs/contracts
-```
+- Represent the IoT domain through reusable device classes.
+- Encapsulate behavior per device type while staying hardware-agnostic.
+- Keep device lifecycle and state handling consistent across the runtime.
 
 ## What it includes
 
 - Base classes: `BaseDevice`, `ActuatorDevice`, `SensorDevice`, `GenericComponentDevice`
 - Actuators: `LedDevice`, `RelayDevice`, `MotorDevice`, `ServoDevice`, `PiezoDevice`
 - Sensors: `TemperatureSensorDevice`, `ThermometerDevice`, `ButtonDevice`, `ProximityDevice`
+
+## 0.2.0 highlights
+
+- clearer lifecycle state transitions
+- public `getStatus()` support through the shared contract
+- lifecycle-aware orchestration via `canHandle(...)`
+- better alignment with runtime restart and disposal flows
+
+## Installation
+
+```bash
+npm install @gortjs/devices @gortjs/contracts
+```
 
 ## Strong device example
 
@@ -37,6 +40,8 @@ const servo = new ServoDevice({
   pin: 9,
   options: { startAt: 90 },
 });
+
+console.log(servo.getStatus());
 ```
 
 ## Generic component example
@@ -47,6 +52,7 @@ import { GenericComponentDevice } from '@gortjs/devices';
 const lcd = new GenericComponentDevice({
   id: 'lcd1',
   type: 'lcd',
+  pin: 3,
   componentClass: 'LCD',
   componentKind: 'actuator',
   commandMethods: ['print', 'clear', 'cursor'],
@@ -58,5 +64,5 @@ const lcd = new GenericComponentDevice({
 Use this package when you want to:
 
 - create a custom device class
-- extend GortJS with a specialized device abstraction
+- extend GortJS with a specialized abstraction for a hardware component
 - reuse the GortJS device model in another runtime

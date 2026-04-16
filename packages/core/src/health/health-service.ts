@@ -1,6 +1,7 @@
 import type {
   EventBusContract,
   IoTAppHealth,
+  IoTAppStatus,
   PersistenceProvider,
 } from '@gortjs/contracts';
 import { BoardManager } from '../board/board-manager';
@@ -17,6 +18,7 @@ export class HealthService {
       deviceTypeRegistry: DeviceTypeRegistry;
       ruleEngine: RuleEngine;
       getPersistence: () => PersistenceProvider | undefined;
+      getAppStatus: () => IoTAppStatus;
     },
   ) {}
 
@@ -38,7 +40,8 @@ export class HealthService {
     return {
       ok: board.ready && (!persistenceHealth.enabled || persistenceHealth.writable),
       app: {
-        deviceCount: this.params.registry.serializeAll().length,
+        status: this.params.getAppStatus(),
+        deviceCount: this.params.registry.count(),
         deviceTypeCount: this.params.deviceTypeRegistry.list().length,
         ruleCount: this.params.ruleEngine.list().length,
       },
