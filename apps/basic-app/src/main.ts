@@ -7,7 +7,9 @@ function logEvent(entry: unknown): void {
 }
 
 async function bootstrap(): Promise<void> {
-  const configPath = resolve(process.cwd(), 'apps/basic-app/config/iot.config.json');
+  const configPath = process.env.GORT_CONFIG_PATH
+    ? resolve(process.cwd(), process.env.GORT_CONFIG_PATH)
+    : resolve(process.cwd(), 'apps/basic-app/config/iot.config.json');
   const runtime = await AppRuntime.fromFile(configPath);
   const app = runtime.getApp();
   const appConfig = runtime.getConfig();
@@ -18,6 +20,7 @@ async function bootstrap(): Promise<void> {
 
   await runtime.start();
 
+  console.log(`Loaded config from ${configPath}`);
   console.log(`REST server running on http://localhost:${appConfig.rest?.port ?? 3000}`);
   console.log(`WebSocket monitoring on ws://localhost:${appConfig.rest?.port ?? 3000}${appConfig.rest?.websocketPath ?? '/ws'}`);
 

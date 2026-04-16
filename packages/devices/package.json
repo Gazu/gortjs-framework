@@ -1,11 +1,11 @@
 {
   "name": "@gortjs/devices",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": { "build": "tsc -b" },
   "dependencies": {
-    "@gortjs/contracts": "0.3.0"
+    "@gortjs/contracts": "0.4.0"
   }
 }

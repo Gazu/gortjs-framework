@@ -1,6 +1,7 @@
 import type {
   EventBusContract,
   IoTAppHealth,
+  IoTAppMetrics,
   IoTAppStatus,
   PersistenceProvider,
 } from '@gortjs/contracts';
@@ -8,6 +9,7 @@ import { BoardManager } from '../board/board-manager';
 import { DeviceRegistry } from '../devices/device-registry';
 import { DeviceTypeRegistry } from '../devices/device-type-registry';
 import { RuleEngine } from '../automation/rule-engine';
+import { WorkflowEngine } from '../automation/workflow-engine';
 
 export class HealthService {
   constructor(
@@ -17,8 +19,10 @@ export class HealthService {
       registry: DeviceRegistry;
       deviceTypeRegistry: DeviceTypeRegistry;
       ruleEngine: RuleEngine;
+      workflowEngine: WorkflowEngine;
       getPersistence: () => PersistenceProvider | undefined;
       getAppStatus: () => IoTAppStatus;
+      getMetrics: () => IoTAppMetrics;
     },
   ) {}
 
@@ -50,6 +54,7 @@ export class HealthService {
         implementation: this.params.eventBus.constructor.name,
       },
       persistence: persistenceHealth,
+      metrics: this.params.getMetrics(),
     };
   }
 }

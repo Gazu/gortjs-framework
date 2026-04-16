@@ -1,5 +1,6 @@
 export * from './iot-app';
 export * from './automation/rule-engine';
+export * from './automation/workflow-engine';
 export * from './board/board-manager';
 export * from './commands/command-dispatcher';
 export * from './config/config-validation-error';
@@ -10,6 +11,9 @@ export * from './devices/device-type-registry';
 export * from './drivers/johnny-five/johnny-five-driver';
 export * from './drivers/johnny-five/johnny-five-component-registry';
 export * from './health/health-service';
+export * from './metrics/app-metrics';
 export * from './persistence/file-persistence';
+export * from './plugins/plugin-registry';
+export * from './plugins/plugin-types';
 export * from './telemetry/event-serializer';
 export * from './drivers/mock/mock-driver';

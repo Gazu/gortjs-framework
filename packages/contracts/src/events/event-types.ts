@@ -11,6 +11,23 @@ export interface EventHistoryEntry {
   timestamp: string;
 }
 
+export interface EventHistoryQuery {
+  eventName?: string;
+  deviceId?: string;
+  from?: string;
+  to?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface EventHistoryPage {
+  events: EventHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+  hasNextPage: boolean;
+}
+
 export interface DeviceEventEnvelope<TPayload = Record<string, unknown>> {
   deviceId: string;
   deviceType: DeviceType;

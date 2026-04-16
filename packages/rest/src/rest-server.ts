@@ -1,16 +1,24 @@
 import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AutomationRule, DeviceConfig, IoTAppStatus } from '@gortjs/contracts';
+import type { AutomationRule, DeviceConfig, IoTAppStatus, RestAuthConfig } from '@gortjs/contracts';
 import { EventSerializer } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import { WebSocketServer } from 'ws';
+import { AuthService } from './auth-service';
 
 export class RestServer {
   private readonly expressApp = express();
   private server?: HttpServer;
   private websocketServer?: WebSocketServer;
   private eventBusCleanup?: () => void;
+  private readonly authService: AuthService;
+  private readonly metrics = {
+    requests: 0,
+    authFailures: 0,
+    websocketConnections: 0,
+    websocketRejected: 0,
+  };
 
   constructor(
     private readonly params: {
@@ -18,14 +26,42 @@ export class RestServer {
       host?: string;
       port?: number;
       websocketPath?: string;
+      auth?: RestAuthConfig;
     }
   ) {
+    this.authService = new AuthService(params.auth);
     this.expressApp.use(express.json());
+    this.expressApp.use((_, __, next) => {
+      this.metrics.requests += 1;
+      next();
+    });
     this.configureRoutes();
   }
 
+  private requireAuth(scopeKey: string) {
+    return async (req: Request, res: Response, next: () => void) => {
+      const result = await this.authService.authorizeHttp(
+        Array.isArray(req.headers.authorization)
+          ? req.headers.authorization[0]
+          : req.headers.authorization,
+        scopeKey,
+      );
+
+      if (!result.ok) {
+        this.metrics.authFailures += 1;
+        res.status(result.statusCode ?? 401).json({
+          ok: false,
+          error: result.error,
+        });
+        return;
+      }
+
+      next();
+    };
+  }
+
   private configureRoutes(): void {
-    this.expressApp.get('/status', (_req: Request, res: Response) => {
+    this.expressApp.get('/status', this.requireAuth('status:read'), (_req: Request, res: Response) => {
       res.json({
         status: this.params.app.getStatus(),
         rest: {
@@ -37,11 +73,11 @@ export class RestServer {
       });
     });
 
-    this.expressApp.get('/snapshot', (_req: Request, res: Response) => {
+    this.expressApp.get('/snapshot', this.requireAuth('snapshot:read'), (_req: Request, res: Response) => {
       res.json(this.params.app.getSnapshot());
     });
 
-    this.expressApp.get('/health', async (_req: Request, res: Response) => {
+    this.expressApp.get('/health', this.requireAuth('health:read'), async (_req: Request, res: Response) => {
       const health = await this.params.app.getHealth();
       res.json({
         ok: health.ok,
@@ -52,33 +88,68 @@ export class RestServer {
       });
     });
 
-    this.expressApp.get('/health/deep', async (_req: Request, res: Response) => {
+    this.expressApp.get('/health/deep', this.requireAuth('health:deep:read'), async (_req: Request, res: Response) => {
       const health = await this.params.app.getHealth();
       res.status(health.ok ? 200 : 503).json(health);
     });
 
-    this.expressApp.get('/devices', (_req: Request, res: Response) => {
+    this.expressApp.get('/metrics', this.requireAuth('metrics:read'), (_req: Request, res: Response) => {
+      res.json({
+        rest: this.metrics,
+        app: this.params.app.getMetrics(),
+      });
+    });
+
+    this.expressApp.get('/devices', this.requireAuth('devices:read'), (_req: Request, res: Response) => {
       res.json({ devices: this.params.app.getDevices() });
     });
 
-    this.expressApp.get('/device-types', (_req: Request, res: Response) => {
+    this.expressApp.get('/device-types', this.requireAuth('device-types:read'), (_req: Request, res: Response) => {
       res.json({ deviceTypes: this.params.app.getDeviceTypes() });
     });
 
-    this.expressApp.get('/rules', (_req: Request, res: Response) => {
-      res.json({ rules: this.params.app.getRules() });
+    this.expressApp.get('/rules', this.requireAuth('rules:read'), (_req: Request, res: Response) => {
+      res.json({
+        rules: this.params.app.getRules(),
+        workflows: this.params.app.getWorkflows(),
+      });
     });
 
-    this.expressApp.get('/events', (req: Request<unknown, unknown, unknown, { limit?: string }>, res: Response) => {
-      const limit = req.query.limit ? Number(req.query.limit) : undefined;
-      res.json({ events: this.params.app.getEventHistory(limit) });
+    this.expressApp.get(
+      '/events',
+      this.requireAuth('events:read'),
+      (
+        req: Request<unknown, unknown, unknown, {
+          eventName?: string;
+          deviceId?: string;
+          from?: string;
+          to?: string;
+          page?: string;
+          pageSize?: string;
+        }>,
+        res: Response,
+      ) => {
+        const page = this.params.app.queryEventHistory({
+          eventName: req.query.eventName,
+          deviceId: req.query.deviceId,
+          from: req.query.from,
+          to: req.query.to,
+          page: req.query.page ? Number(req.query.page) : undefined,
+          pageSize: req.query.pageSize ? Number(req.query.pageSize) : undefined,
+        });
+        res.json(page);
+      },
+    );
+
+    this.expressApp.get('/workflows', this.requireAuth('workflows:read'), (_req: Request, res: Response) => {
+      res.json({ workflows: this.params.app.getWorkflows() });
     });
 
-    this.expressApp.get('/persisted-state', (_req: Request, res: Response) => {
+    this.expressApp.get('/persisted-state', this.requireAuth('persisted-state:read'), (_req: Request, res: Response) => {
       res.json({ devices: this.params.app.getPersistedDeviceStates() });
     });
 
-    this.expressApp.get('/devices/:id', (req: Request<{ id: string }>, res: Response) => {
+    this.expressApp.get('/devices/:id', this.requireAuth('devices:read'), (req: Request<{ id: string }>, res: Response) => {
       try {
         const device = this.params.app.getDevice(req.params.id);
         res.json(device.getState());
@@ -87,7 +158,7 @@ export class RestServer {
       }
     });
 
-    this.expressApp.get('/devices/:id/state', (req: Request<{ id: string }>, res: Response) => {
+    this.expressApp.get('/devices/:id/state', this.requireAuth('devices:read'), (req: Request<{ id: string }>, res: Response) => {
       try {
         const device = this.params.app.getDevice(req.params.id);
         res.json({ state: device.getState() });
@@ -98,6 +169,7 @@ export class RestServer {
 
     this.expressApp.post(
       '/devices',
+      this.requireAuth('devices:write'),
       (
         req: Request<unknown, unknown, DeviceConfig>,
         res: Response,
@@ -116,6 +188,7 @@ export class RestServer {
 
     this.expressApp.post(
       '/devices/:id/commands',
+      this.requireAuth('commands:write'),
       async (
         req: Request<{ id: string }, unknown, { command?: string; payload?: Record<string, unknown> }>,
         res: Response
@@ -140,6 +213,7 @@ export class RestServer {
 
     this.expressApp.post(
       '/rules',
+      this.requireAuth('rules:write'),
       (
         req: Request<unknown, unknown, AutomationRule>,
         res: Response,
@@ -156,7 +230,7 @@ export class RestServer {
       },
     );
 
-    this.expressApp.delete('/rules/:id', (req: Request<{ id: string }>, res: Response) => {
+    this.expressApp.delete('/rules/:id', this.requireAuth('rules:write'), (req: Request<{ id: string }>, res: Response) => {
       try {
         this.params.app.unregisterRule(req.params.id);
         res.json({ ok: true, rules: this.params.app.getRules() });
@@ -168,7 +242,7 @@ export class RestServer {
       }
     });
 
-    this.expressApp.post('/lifecycle/:action', async (req: Request<{ action: string }>, res: Response) => {
+    this.expressApp.post('/lifecycle/:action', this.requireAuth('lifecycle:write'), async (req: Request<{ action: string }>, res: Response) => {
       try {
         const status = await this.performLifecycleAction(req.params.action);
         res.json({
@@ -186,6 +260,7 @@ export class RestServer {
   }
 
   async start(): Promise<void> {
+    await this.authService.initialize();
     await new Promise<void>((resolve) => {
       this.server = this.expressApp.listen(
         this.params.port ?? 3000,
@@ -199,13 +274,23 @@ export class RestServer {
       path: this.params.websocketPath ?? '/ws',
     });
 
-    this.websocketServer.on('connection', (socket) => {
+    this.websocketServer.on('connection', async (socket, request) => {
+      const authResult = await this.authService.authorizeWebSocket(request, 'ws:connect');
+      if (!authResult.ok) {
+        this.metrics.authFailures += 1;
+        this.metrics.websocketRejected += 1;
+        socket.close(1008, authResult.error);
+        return;
+      }
+
+      this.metrics.websocketConnections += 1;
       void this.params.app.getHealth().then((health) => {
         socket.send(JSON.stringify({
           eventName: 'ws:connected',
           payload: {
             devices: this.params.app.getDevices(),
             rules: this.params.app.getRules(),
+            workflows: this.params.app.getWorkflows(),
             health,
           },
           timestamp: new Date().toISOString(),
@@ -226,8 +311,17 @@ export class RestServer {
   async stop(): Promise<void> {
     this.eventBusCleanup?.();
     this.eventBusCleanup = undefined;
-    this.websocketServer?.close();
-    this.websocketServer = undefined;
+
+    if (this.websocketServer) {
+      for (const client of this.websocketServer.clients) {
+        client.terminate();
+      }
+
+      await new Promise<void>((resolve) => {
+        this.websocketServer?.close(() => resolve());
+      });
+      this.websocketServer = undefined;
+    }
 
     if (!this.server) {
       return;

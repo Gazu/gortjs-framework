@@ -1,5 +1,6 @@
 import type {
   AutomationRule,
+  AutomationRuleCondition,
   Cleanup,
   DeviceCommand,
   EventBusContract,
@@ -18,15 +19,11 @@ function getValueAtPath(source: unknown, path: string): unknown {
     }, source);
 }
 
-function evaluateCondition(rule: AutomationRule, payload: unknown): boolean {
-  if (!rule.condition) {
-    return true;
-  }
+function evaluateCondition(condition: AutomationRuleCondition, payload: unknown): boolean {
+  const actualValue = getValueAtPath(payload, condition.path);
+  const expectedValue = condition.value;
 
-  const actualValue = getValueAtPath(payload, rule.condition.path);
-  const expectedValue = rule.condition.value;
-
-  switch (rule.condition.operator) {
+  switch (condition.operator) {
     case 'eq':
       return actualValue === expectedValue;
     case 'neq':
@@ -48,6 +45,18 @@ function evaluateCondition(rule: AutomationRule, payload: unknown): boolean {
   }
 }
 
+function matchesRuleConditions(rule: AutomationRule, payload: unknown): boolean {
+  const conditions = rule.conditions ?? (rule.condition ? [rule.condition] : []);
+  if (conditions.length === 0) {
+    return true;
+  }
+
+  const results = conditions.map((condition) => evaluateCondition(condition, payload));
+  return (rule.conditionMatch ?? 'all') === 'any'
+    ? results.some(Boolean)
+    : results.every(Boolean);
+}
+
 export class RuleEngine {
   private readonly rules = new Map<string, AutomationRule>();
   private readonly cleanups = new Map<string, Cleanup>();
@@ -61,6 +70,8 @@ export class RuleEngine {
         command: DeviceCommand | string,
         payload?: Record<string, unknown>,
       ) => Promise<unknown>;
+      executeWorkflow?: (workflowId: string, input?: Record<string, unknown>) => Promise<void>;
+      onRuleExecuted?: (ruleId: string) => void;
     },
   ) {}
 
@@ -77,15 +88,22 @@ export class RuleEngine {
         return;
       }
 
-      if (!evaluateCondition(rule, payload)) {
+      if (!matchesRuleConditions(rule, payload)) {
         return;
       }
 
       this.lastExecutionAt.set(rule.id, Date.now());
 
       for (const action of rule.actions) {
+        if (action.type === 'workflow') {
+          await this.params.executeWorkflow?.(action.workflowId, action.input ?? {});
+          continue;
+        }
+
         await this.params.executeCommand(action.deviceId, action.command, action.payload ?? {});
       }
+
+      this.params.onRuleExecuted?.(rule.id);
     });
 
     this.cleanups.set(rule.id, cleanup);

@@ -1,0 +1,126 @@
+{
+  "runtime": {
+    "driver": "mock",
+    "profile": "open"
+  },
+  "profiles": {
+    "open": {
+      "rest": {
+        "port": 3000,
+        "websocketPath": "/ws"
+      }
+    },
+    "static-auth": {
+      "rest": {
+        "port": 3000,
+        "websocketPath": "/ws",
+        "auth": {
+          "mode": "static",
+          "token": "gortjs-static-demo-token",
+          "tokenScopes": [
+            "gortjs:read",
+            "gortjs:write",
+            "gortjs:stream",
+            "gortjs:metrics",
+            "gortjs:admin"
+          ],
+          "scopes": {
+            "status:read": ["gortjs:read"],
+            "snapshot:read": ["gortjs:read"],
+            "health:read": ["gortjs:read"],
+            "health:deep:read": ["gortjs:read"],
+            "metrics:read": ["gortjs:metrics"],
+            "devices:read": ["gortjs:read"],
+            "device-types:read": ["gortjs:read"],
+            "rules:read": ["gortjs:read"],
+            "workflows:read": ["gortjs:read"],
+            "events:read": ["gortjs:read"],
+            "persisted-state:read": ["gortjs:read"],
+            "devices:write": ["gortjs:write"],
+            "commands:write": ["gortjs:write"],
+            "rules:write": ["gortjs:write"],
+            "lifecycle:write": ["gortjs:admin"],
+            "ws:connect": ["gortjs:stream"]
+          }
+        }
+      }
+    },
+    "jwt-auth": {
+      "rest": {
+        "port": 3000,
+        "websocketPath": "/ws",
+        "auth": {
+          "mode": "jwt",
+          "publicKeyFile": "../keys/jwt-public.pem",
+          "issuer": "https://auth.gortjs.local",
+          "audience": "gortjs-basic-app",
+          "scopeClaim": "scope",
+          "scopes": {
+            "status:read": ["gortjs:read"],
+            "snapshot:read": ["gortjs:read"],
+            "health:read": ["gortjs:read"],
+            "health:deep:read": ["gortjs:read"],
+            "metrics:read": ["gortjs:metrics"],
+            "devices:read": ["gortjs:read"],
+            "device-types:read": ["gortjs:read"],
+            "rules:read": ["gortjs:read"],
+            "workflows:read": ["gortjs:read"],
+            "events:read": ["gortjs:read"],
+            "persisted-state:read": ["gortjs:read"],
+            "devices:write": ["gortjs:write"],
+            "commands:write": ["gortjs:write"],
+            "rules:write": ["gortjs:write"],
+            "lifecycle:write": ["gortjs:admin"],
+            "ws:connect": ["gortjs:stream"]
+          }
+        }
+      }
+    }
+  },
+  "devices": [
+    {
+      "id": "temp1",
+      "type": "temperature",
+      "pin": "A0",
+      "options": {
+        "freq": 1500,
+        "unit": "raw"
+      }
+    },
+    {
+      "id": "led1",
+      "type": "led",
+      "pin": 13
+    },
+    {
+      "id": "relay1",
+      "type": "relay",
+      "pin": 7
+    }
+  ],
+  "workflows": [
+    {
+      "id": "heartbeat_led",
+      "trigger": {
+        "schedule": {
+          "everyMs": 3000
+        }
+      },
+      "steps": [
+        {
+          "type": "command",
+          "deviceId": "led1",
+          "command": "toggle"
+        }
+      ]
+    }
+  ],
+  "persistence": {
+    "directory": "../data",
+    "eventLogFile": "events.jsonl",
+    "stateFile": "state.json",
+    "maxEvents": 500,
+    "rotateAfterBytes": 32768,
+    "maxBackups": 5
+  }
+}

@@ -15,6 +15,8 @@ import type {
   DeviceState,
   EventBusContract,
   EventHistoryEntry,
+  EventHistoryPage,
+  EventHistoryQuery,
   PersistenceProvider,
   PersistenceHealth,
   PersistenceConfig,
@@ -83,6 +85,44 @@ export class FilePersistence implements PersistenceProvider {
 
   getEventHistory(limit = this.maxEvents): EventHistoryEntry[] {
     return this.eventHistory.slice(-limit);
+  }
+
+  queryEventHistory(query: EventHistoryQuery = {}): EventHistoryPage {
+    const pageSize = Math.max(1, Math.min(query.pageSize ?? 50, 500));
+    const page = Math.max(1, query.page ?? 1);
+
+    const filtered = this.eventHistory.filter((entry) => {
+      if (query.eventName && entry.eventName !== query.eventName) {
+        return false;
+      }
+
+      const payload = entry.payload as Record<string, unknown> | undefined;
+      if (query.deviceId && payload?.deviceId !== query.deviceId) {
+        return false;
+      }
+
+      if (query.from && entry.timestamp < query.from) {
+        return false;
+      }
+
+      if (query.to && entry.timestamp > query.to) {
+        return false;
+      }
+
+      return true;
+    });
+
+    const total = filtered.length;
+    const start = (page - 1) * pageSize;
+    const events = filtered.slice(start, start + pageSize);
+
+    return {
+      events,
+      total,
+      page,
+      pageSize,
+      hasNextPage: start + pageSize < total,
+    };
   }
 
   getPersistedStates(): DeviceState[] {
