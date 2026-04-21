@@ -1,7 +1,7 @@
 import { createPublicKey, createVerify, timingSafeEqual } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
+import { readFile, stat } from 'node:fs/promises';
 import type { IncomingMessage } from 'node:http';
-import type { RestAuthConfig } from '@gortjs/contracts';
+import { createTimestamp, type RestAuthConfig, type RestAuthHealth } from '@gortjs/contracts';
 
 type AuthResult = {
   ok: boolean;
@@ -52,6 +52,10 @@ function ensureScopes(required: string[], available: string[]): boolean {
 
 export class AuthService {
   private publicKey?: string;
+  private publicKeyMtimeMs?: number;
+  private lastLoadedAt?: string;
+  private lastReloadAt?: string;
+  private lastReloadError?: string;
 
   constructor(private readonly config?: RestAuthConfig) {}
 
@@ -62,11 +66,12 @@ export class AuthService {
 
     if (this.config.publicKey) {
       this.publicKey = this.config.publicKey;
+      this.lastLoadedAt = createTimestamp();
       return;
     }
 
     if (this.config.publicKeyFile) {
-      this.publicKey = await readFile(this.config.publicKeyFile, 'utf8');
+      await this.reloadPublicKeyIfNeeded(true);
     }
   }
 
@@ -97,6 +102,8 @@ export class AuthService {
       return { ok: true, scopes: [] };
     }
 
+    await this.reloadPublicKeyIfNeeded();
+
     if (!token) {
       return { ok: false, statusCode: 401, error: 'Missing bearer token', scopes: [] };
     }
@@ -121,6 +128,22 @@ export class AuthService {
     }
 
     return result;
+  }
+
+  getHealth(): RestAuthHealth {
+    return {
+      enabled: this.isEnabled(),
+      mode: this.config?.mode,
+      source: this.config?.publicKeyFile ? 'file' : this.config?.publicKey ? 'inline' : undefined,
+      algorithms: this.config?.algorithms,
+      issuer: this.config?.issuer,
+      audience: this.config?.audience,
+      scopeClaim: this.config?.scopeClaim,
+      configuredScopes: Object.keys(this.config?.scopes ?? {}),
+      lastLoadedAt: this.lastLoadedAt,
+      lastReloadAt: this.lastReloadAt,
+      lastReloadError: this.lastReloadError,
+    };
   }
 
   private verifyStaticToken(token: string): AuthResult {
@@ -206,6 +229,32 @@ export class AuthService {
         error: error instanceof Error ? error.message : 'Invalid JWT',
         scopes: [],
       };
+    }
+  }
+
+  private async reloadPublicKeyIfNeeded(force = false): Promise<void> {
+    if (this.config?.mode !== 'jwt' || !this.config.publicKeyFile) {
+      return;
+    }
+
+    try {
+      const fileStats = await stat(this.config.publicKeyFile);
+      if (!force && typeof this.publicKeyMtimeMs !== 'undefined' && this.publicKeyMtimeMs === fileStats.mtimeMs) {
+        return;
+      }
+
+      this.publicKey = await readFile(this.config.publicKeyFile, 'utf8');
+      this.publicKeyMtimeMs = fileStats.mtimeMs;
+      this.lastReloadAt = createTimestamp();
+      if (!this.lastLoadedAt) {
+        this.lastLoadedAt = this.lastReloadAt;
+      }
+      this.lastReloadError = undefined;
+    } catch (error) {
+      this.lastReloadError = error instanceof Error ? error.message : String(error);
+      if (!this.publicKey) {
+        throw error;
+      }
     }
   }
 }

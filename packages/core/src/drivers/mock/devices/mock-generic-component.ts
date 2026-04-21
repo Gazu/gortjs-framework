@@ -1,4 +1,5 @@
 import type { Cleanup, ComponentDriver, EventEmitterOptions } from '@gortjs/contracts';
+import { createTimestamp } from '@gortjs/contracts';
 
 type Handler = (payload: unknown) => void;
 
@@ -40,7 +41,7 @@ export class MockGenericComponent implements ComponentDriver {
   invoke(methodName: string, args: unknown[] = []): unknown {
     this.state.lastMethod = methodName;
     this.state.lastArgs = args;
-    this.state.updatedAt = new Date().toISOString();
+    this.state.updatedAt = createTimestamp();
     this.applyMethodState(methodName, args);
     this.emitLocal('change', {
       method: methodName,
@@ -86,7 +87,7 @@ export class MockGenericComponent implements ComponentDriver {
           celsius,
           fahrenheit: Math.round((celsius * 1.8 + 32) * 10) / 10,
           kelvin: Math.round((celsius + 273.15) * 10) / 10,
-          updatedAt: new Date().toISOString(),
+          updatedAt: createTimestamp(),
         };
       }
       case 'Proximity': {
@@ -94,14 +95,14 @@ export class MockGenericComponent implements ComponentDriver {
         return {
           cm,
           inches: Math.round((cm / 2.54) * 10) / 10,
-          updatedAt: new Date().toISOString(),
+          updatedAt: createTimestamp(),
         };
       }
       default:
         return {
           value: baseValue,
           componentClass: this.params.componentClass,
-          updatedAt: new Date().toISOString(),
+          updatedAt: createTimestamp(),
         };
     }
   }
@@ -114,7 +115,7 @@ export class MockGenericComponent implements ComponentDriver {
         this.state.pressed = eventName !== 'release';
         this.emitLocal(eventName, {
           pressed: this.state.pressed,
-          updatedAt: new Date().toISOString(),
+          updatedAt: createTimestamp(),
         });
         break;
       }

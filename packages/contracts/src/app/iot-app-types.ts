@@ -22,6 +22,20 @@ export interface RestAuthConfig {
   scopes?: Record<string, string[]>;
 }
 
+export interface RestAuthHealth {
+  enabled: boolean;
+  mode?: RestAuthMode;
+  source?: 'inline' | 'file';
+  algorithms?: Array<'RS256'>;
+  issuer?: string;
+  audience?: string | string[];
+  scopeClaim?: string;
+  configuredScopes: string[];
+  lastLoadedAt?: string;
+  lastReloadAt?: string;
+  lastReloadError?: string;
+}
+
 export interface RestServerConfig {
   enabled?: boolean;
   host?: string;
@@ -34,6 +48,7 @@ export interface IoTRuntimeConfig {
   driver?: SupportedDriverName;
   board?: Record<string, unknown>;
   profile?: string;
+  timezone?: string;
   metrics?: {
     enabled?: boolean;
   };
@@ -73,9 +88,11 @@ export interface IoTAppHealth {
   ok: boolean;
   app: {
     status: IoTAppStatus;
+    timeZone?: string;
     deviceCount: number;
     deviceTypeCount: number;
     ruleCount: number;
+    workflowCount: number;
   };
   board: {
     ready: boolean;

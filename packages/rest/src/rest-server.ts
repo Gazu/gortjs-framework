@@ -2,7 +2,7 @@ import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import type { AutomationRule, DeviceConfig, IoTAppStatus, RestAuthConfig } from '@gortjs/contracts';
-import { EventSerializer } from '@gortjs/contracts';
+import { EventSerializer, createTimestamp } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import { WebSocketServer } from 'ws';
 import { AuthService } from './auth-service';
@@ -64,6 +64,7 @@ export class RestServer {
     this.expressApp.get('/status', this.requireAuth('status:read'), (_req: Request, res: Response) => {
       res.json({
         status: this.params.app.getStatus(),
+        timeZone: this.params.app.getTimeZone(),
         rest: {
           running: this.isRunning(),
           port: this.getPort(),
@@ -85,12 +86,39 @@ export class RestServer {
         boardReady: health.board.ready,
         eventBus: health.eventBus.implementation,
         persistenceEnabled: health.persistence.enabled,
+        auth: this.authService.getHealth(),
       });
     });
 
     this.expressApp.get('/health/deep', this.requireAuth('health:deep:read'), async (_req: Request, res: Response) => {
       const health = await this.params.app.getHealth();
       res.status(health.ok ? 200 : 503).json(health);
+    });
+
+    this.expressApp.get('/diagnostics', this.requireAuth('health:deep:read'), async (_req: Request, res: Response) => {
+      const health = await this.params.app.getHealth();
+      const auth = this.authService.getHealth();
+      const warnings = [
+        ...(health.persistence.corruptedEntries ? [`Persistence skipped ${health.persistence.corruptedEntries} corrupted event entries`] : []),
+        ...(health.persistence.stateRecovered ? ['Persistence recovered with empty in-memory state after a load failure'] : []),
+        ...(auth.lastReloadError ? [`Auth key reload warning: ${auth.lastReloadError}`] : []),
+      ];
+
+      res.status(health.ok ? 200 : 503).json({
+        ok: health.ok,
+        service: 'rest',
+        rest: {
+          running: this.isRunning(),
+          port: this.getPort(),
+          url: this.getUrl(),
+          websocketUrl: this.getWebSocketUrl(),
+          metrics: this.metrics,
+        },
+        auth,
+        health,
+        snapshot: this.params.app.getSnapshot(),
+        warnings,
+      });
     });
 
     this.expressApp.get('/metrics', this.requireAuth('metrics:read'), (_req: Request, res: Response) => {
@@ -293,7 +321,7 @@ export class RestServer {
             workflows: this.params.app.getWorkflows(),
             health,
           },
-          timestamp: new Date().toISOString(),
+          timestamp: createTimestamp(),
         }));
       });
     });

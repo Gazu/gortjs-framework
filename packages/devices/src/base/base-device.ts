@@ -1,4 +1,4 @@
-import type {
+import {
   DeviceAttachContext,
   DeviceConfig,
   DeviceState,
@@ -6,6 +6,7 @@ import type {
   Cleanup,
   DeviceEventEnvelope,
   DeviceStatus,
+  createTimestamp,
 } from '@gortjs/contracts';
 
 export abstract class BaseDevice implements BaseDeviceContract {
@@ -70,7 +71,7 @@ export abstract class BaseDevice implements BaseDeviceContract {
       deviceId: this.id,
       deviceType: this.type,
       payload,
-      timestamp: new Date().toISOString(),
+      timestamp: createTimestamp(),
     };
 
     this.eventBus?.emit(eventName, event);

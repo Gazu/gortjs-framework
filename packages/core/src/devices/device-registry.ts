@@ -1,5 +1,5 @@
 import type { BaseDeviceContract, DriverContract, EventBusContract } from '@gortjs/contracts';
-import { deviceEventNames } from '@gortjs/contracts';
+import { createTimestamp, deviceEventNames } from '@gortjs/contracts';
 
 export class DeviceRegistry {
   private readonly devices = new Map<string, BaseDeviceContract>();
@@ -23,7 +23,7 @@ export class DeviceRegistry {
       deviceId: device.id,
       deviceType: device.type,
       payload: {},
-      timestamp: new Date().toISOString(),
+      timestamp: createTimestamp(),
     });
 
     return device;

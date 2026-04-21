@@ -1,5 +1,5 @@
 import type { ActuatorDeviceContract, DeviceCommand, EventBusContract } from '@gortjs/contracts';
-import { deviceEventNames } from '@gortjs/contracts';
+import { createTimestamp, deviceEventNames } from '@gortjs/contracts';
 import { DeviceRegistry } from '../devices/device-registry';
 
 function normalizeCommand(
@@ -39,7 +39,7 @@ export class CommandDispatcher {
         deviceId,
         deviceType,
         payload: { command },
-        timestamp: new Date().toISOString(),
+        timestamp: createTimestamp(),
       });
 
       if (typeof device.execute !== 'function') {
@@ -56,7 +56,7 @@ export class CommandDispatcher {
           command,
           state,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: createTimestamp(),
       });
 
       return state;
@@ -69,7 +69,7 @@ export class CommandDispatcher {
           command,
           error: message,
         },
-        timestamp: new Date().toISOString(),
+        timestamp: createTimestamp(),
       });
       throw error;
     }

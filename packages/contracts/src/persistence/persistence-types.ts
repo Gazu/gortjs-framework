@@ -29,6 +29,9 @@ export interface PersistenceHealth {
   lastRotationAt?: string;
   backups: BackupFileInfo[];
   writable: boolean;
+  corruptedEntries?: number;
+  stateRecovered?: boolean;
+  lastError?: string;
 }
 
 export interface PersistenceProvider {
