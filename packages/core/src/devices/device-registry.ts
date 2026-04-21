@@ -83,6 +83,10 @@ export class DeviceRegistry {
     }
   }
 
+  clear(): void {
+    this.devices.clear();
+  }
+
   serializeAll() {
     return this.getAll().map((device) => device.getState());
   }

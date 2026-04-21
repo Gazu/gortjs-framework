@@ -1,8 +1,10 @@
+import { pathToFileURL } from 'node:url';
 import { readFile } from 'node:fs/promises';
 import { dirname, isAbsolute, resolve } from 'node:path';
 import type {
   DeviceConstructor,
   IoTAppConfig,
+  RuntimeAdminProvider,
   RuntimeProfileConfig,
 } from '@gortjs/contracts';
 import { IoTApp, PluginRegistry, JohnnyFiveDriver, MockDriver } from '@gortjs/core';
@@ -50,6 +52,12 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
     config.rest.auth.publicKeyFile = resolveMaybe(config.rest.auth.publicKeyFile)!;
   }
 
+  for (const pluginRef of config.plugins ?? []) {
+    if (pluginRef.path) {
+      pluginRef.path = resolveMaybe(pluginRef.path)!;
+    }
+  }
+
   for (const profile of Object.values(config.profiles ?? {})) {
     if (profile.persistence?.directory) {
       profile.persistence.directory = resolveMaybe(profile.persistence.directory)!;
@@ -58,9 +66,29 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
     if (profile.rest?.auth?.publicKeyFile) {
       profile.rest.auth.publicKeyFile = resolveMaybe(profile.rest.auth.publicKeyFile)!;
     }
+
+    for (const pluginRef of profile.plugins ?? []) {
+      if (pluginRef.path) {
+        pluginRef.path = resolveMaybe(pluginRef.path)!;
+      }
+    }
   }
 
   return config;
+}
+
+async function loadPluginFromReference(pluginRef: { name: string; path?: string }): Promise<GortPlugin | undefined> {
+  if (!pluginRef.path) {
+    return undefined;
+  }
+
+  const module = await import(pathToFileURL(pluginRef.path).href);
+  const plugin = (module.default ?? module.plugin ?? module) as GortPlugin;
+  if (!plugin?.manifest || typeof plugin.register !== 'function') {
+    throw new Error(`Plugin module '${pluginRef.path}' must export a GortPlugin`);
+  }
+
+  return plugin;
 }
 
 export type AppRuntimeOptions = {
@@ -74,6 +102,7 @@ export class AppRuntime {
       app: IoTApp;
       config: IoTAppConfig;
       restServer?: RestServer;
+      admin: RuntimeAdminProvider;
     },
   ) {}
 
@@ -91,7 +120,11 @@ export class AppRuntime {
     });
 
     for (const pluginRef of effectiveConfig.plugins ?? []) {
-      await plugins.applyPlugin(pluginRef.name, pluginRef.options);
+      const dynamicPlugin = await loadPluginFromReference(pluginRef);
+      if (dynamicPlugin) {
+        plugins.loadPlugin(dynamicPlugin, 'module', pluginRef.path);
+      }
+      await plugins.applyPlugin(pluginRef.name, pluginRef.options, pluginRef.path);
     }
 
     const app = new IoTApp({
@@ -106,13 +139,39 @@ export class AppRuntime {
       ? undefined
       : new RestServer({
           app,
+          admin: {
+            getPluginCatalog: () => plugins.listPlugins(),
+            getJobs: () => app.getWorkflowJobs(),
+            getRuntimeSummary: () => ({
+              config: effectiveConfig,
+              plugins: plugins.listPlugins(),
+              availableDrivers: plugins.listDrivers(),
+              availableDeviceTypes: plugins.listDeviceTypes(),
+              jobs: app.getWorkflowJobs(),
+            }),
+          },
           host: effectiveConfig.rest?.host,
           port: effectiveConfig.rest?.port,
           websocketPath: effectiveConfig.rest?.websocketPath,
           auth: effectiveConfig.rest?.auth,
         });
 
-    return new AppRuntime({ app, config: effectiveConfig, restServer });
+    return new AppRuntime({
+      app,
+      config: effectiveConfig,
+      restServer,
+      admin: {
+        getPluginCatalog: () => plugins.listPlugins(),
+        getJobs: () => app.getWorkflowJobs(),
+        getRuntimeSummary: () => ({
+          config: effectiveConfig,
+          plugins: plugins.listPlugins(),
+          availableDrivers: plugins.listDrivers(),
+          availableDeviceTypes: plugins.listDeviceTypes(),
+          jobs: app.getWorkflowJobs(),
+        }),
+      },
+    });
   }
 
   static async fromFile(filePath: string): Promise<AppRuntime> {
@@ -131,6 +190,10 @@ export class AppRuntime {
 
   getRestServer(): RestServer | undefined {
     return this.params.restServer;
+  }
+
+  getAdmin(): RuntimeAdminProvider {
+    return this.params.admin;
   }
 
   async start(): Promise<void> {

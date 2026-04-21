@@ -4,7 +4,7 @@ function pad(value: number, size = 2): string {
   return String(value).padStart(size, '0');
 }
 
-function getTimeParts(date: Date, timeZone: string): Record<string, number> {
+export function getZonedTimeParts(date: Date, timeZone: string): Record<string, number> {
   const formatter = new Intl.DateTimeFormat('en-CA', {
     timeZone,
     year: 'numeric',
@@ -28,7 +28,7 @@ function getTimeParts(date: Date, timeZone: string): Record<string, number> {
 }
 
 function getOffsetMinutes(date: Date, timeZone: string): number {
-  const parts = getTimeParts(date, timeZone);
+  const parts = getZonedTimeParts(date, timeZone);
   const utcTime = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -68,7 +68,7 @@ export function createTimestamp(input: Date = new Date(), timeZone = configuredT
     return input.toISOString();
   }
 
-  const parts = getTimeParts(input, timeZone);
+  const parts = getZonedTimeParts(input, timeZone);
   const offsetMinutes = getOffsetMinutes(input, timeZone);
   const sign = offsetMinutes >= 0 ? '+' : '-';
   const absoluteOffset = Math.abs(offsetMinutes);

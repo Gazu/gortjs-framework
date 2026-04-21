@@ -2,7 +2,7 @@
 
 `@gortjs/core` is the main GortJS runtime package. It provides `IoTApp`, the built-in drivers, device orchestration, command dispatching, automation, persistence, configuration loading, and health reporting.
 
-Documented for release `0.5.0`.
+Documented for release `0.6.0`.
 
 ## Purpose
 
@@ -10,13 +10,12 @@ Documented for release `0.5.0`.
 - Run the same application logic with real hardware or simulation.
 - Provide a clean entry point for building modular IoT applications.
 
-## Highlights in 0.5.0
+## Highlights in 0.6.0
 
-- Grouped config validation failures for faster debugging
-- Workflow counts included in deep health reports
-- Persistence recovery diagnostics for corrupted state or event log entries
-- Better path resolution support when bootstrapping from file-based configs
-- Runtime-level `timezone` support for timestamps and health metadata
+- Workflow engine v2 with retries, branch steps, and explicit step-level error handling
+- Cron-like schedules, queue/forbid concurrency policies, and schedulable job inspection
+- Snapshot import support for rebuilding runtime topology while the app is stopped
+- Formal plugin catalog support for drivers and device types
 
 ## Installation
 

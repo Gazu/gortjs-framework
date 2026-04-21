@@ -2,7 +2,7 @@
 
 `@gortjs/rest` exposes an `IoTApp` instance over HTTP and WebSocket for control, observability, and live monitoring.
 
-Documented for release `0.5.0`.
+Documented for release `0.6.0`.
 
 ## Purpose
 
@@ -18,6 +18,9 @@ Documented for release `0.5.0`.
 - `GET /health`
 - `GET /health/deep`
 - `GET /diagnostics`
+- `GET /plugins`
+- `GET /jobs`
+- `GET /runtime`
 - `GET /devices`
 - `GET /devices/:id`
 - `GET /device-types`
@@ -27,7 +30,11 @@ Documented for release `0.5.0`.
 - `POST /devices`
 - `POST /devices/:id/commands`
 - `POST /rules`
+- `POST /workflows`
+- `POST /workflows/:id/run`
+- `POST /snapshot/import`
 - `DELETE /rules/:id`
+- `DELETE /workflows/:id`
 - `POST /lifecycle/:action`
 - `WS /ws`
 
@@ -51,13 +58,11 @@ const runtime = await AppRuntime.fromConfig({
 await runtime.start();
 ```
 
-## Why it matters in 0.5.0
+## Why it matters in 0.6.0
 
-- it exposes the richer health model from `@gortjs/core`
-- it fits naturally on top of lifecycle-aware `IoTApp` instances
-- it gives dashboards and external services a thin operational interface
-- it can now bootstrap a complete runtime from config with `AppRuntime`
-- it surfaces the configured runtime time zone through status and health views
+- it exposes a true admin/runtime surface instead of only device control endpoints
+- it makes plugin catalogs, scheduler jobs, and runtime configuration inspectable over HTTP
+- it supports workflow operations and snapshot import as first-class runtime actions
 
 ## curl example
 

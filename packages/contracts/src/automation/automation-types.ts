@@ -36,8 +36,15 @@ export interface AutomationRule {
 }
 
 export interface WorkflowScheduleTrigger {
-  everyMs: number;
+  everyMs?: number;
+  cron?: string;
   runAtStartup?: boolean;
+  timeZone?: string;
+  window?: {
+    start?: string;
+    end?: string;
+  };
+  concurrency?: 'allow' | 'forbid' | 'queue';
 }
 
 export interface WorkflowTrigger {
@@ -54,30 +61,53 @@ export interface WorkflowCommandStep {
   deviceId: string;
   command: DeviceCommand | string;
   payload?: Record<string, unknown>;
+  if?: AutomationRuleCondition;
+  retries?: number;
+  retryDelayMs?: number;
+  onError?: 'stop' | 'continue';
 }
 
 export interface WorkflowDelayStep {
   type: 'delay';
   ms: number;
+  if?: AutomationRuleCondition;
+  onError?: 'stop' | 'continue';
 }
 
 export interface WorkflowEmitStep {
   type: 'emit';
   eventName: string;
   payload?: Record<string, unknown>;
+  if?: AutomationRuleCondition;
+  retries?: number;
+  retryDelayMs?: number;
+  onError?: 'stop' | 'continue';
 }
 
 export interface WorkflowRunStep {
   type: 'workflow';
   workflowId: string;
   input?: Record<string, unknown>;
+  if?: AutomationRuleCondition;
+  retries?: number;
+  retryDelayMs?: number;
+  onError?: 'stop' | 'continue';
+}
+
+export interface WorkflowBranchStep {
+  type: 'branch';
+  condition: AutomationRuleCondition;
+  then: WorkflowStep[];
+  elseSteps?: WorkflowStep[];
+  onError?: 'stop' | 'continue';
 }
 
 export type WorkflowStep =
   | WorkflowCommandStep
   | WorkflowDelayStep
   | WorkflowEmitStep
-  | WorkflowRunStep;
+  | WorkflowRunStep
+  | WorkflowBranchStep;
 
 export interface WorkflowDefinition {
   id: string;

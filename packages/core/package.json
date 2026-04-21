@@ -1,14 +1,14 @@
 {
   "name": "@gortjs/core",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": { "build": "tsc -b" },
   "dependencies": {
-    "@gortjs/contracts": "0.5.0",
-    "@gortjs/devices": "0.5.0",
-    "@gortjs/events": "0.5.0",
+    "@gortjs/contracts": "0.6.0",
+    "@gortjs/devices": "0.6.0",
+    "@gortjs/events": "0.6.0",
     "johnny-five": "^2.1.0"
   },
   "devDependencies": {

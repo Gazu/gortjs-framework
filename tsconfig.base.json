@@ -17,7 +17,8 @@
       "@gortjs/events": ["packages/events/src"],
       "@gortjs/devices": ["packages/devices/src"],
       "@gortjs/core": ["packages/core/src"],
-      "@gortjs/rest": ["packages/rest/src"]
+      "@gortjs/rest": ["packages/rest/src"],
+      "@gortjs/cli": ["packages/cli/src"]
     }
   }
 }

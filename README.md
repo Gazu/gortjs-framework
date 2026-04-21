@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.5.0`
+Current documented release: `0.6.0`
 
 ## Core idea
 
@@ -20,14 +20,13 @@ Current documented release: `0.5.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.5.0
+## What changed in 0.6.0
 
-- Grouped and clearer config validation errors before startup.
-- JWT auth can reload a public key from file without restarting the runtime.
-- New `GET /diagnostics` endpoint for deeper REST, auth, and persistence visibility.
-- Persistence now tolerates corrupted history/state files and reports recovery diagnostics.
-- Runtime path resolution now also covers profile-specific persistence and JWT public key files.
-- `runtime.timezone` now lets the runtime emit timestamps using a configured IANA time zone.
+- Formal plugin manifests and plugin catalog support.
+- Workflow engine v2 with branch steps, retries, explicit error handling, and cron-like schedules.
+- Scheduler job inspection with concurrency policies and runtime-aware time handling.
+- Expanded admin REST surface for plugins, jobs, runtime introspection, workflow execution, and snapshot import.
+- Official monorepo CLI for config validation, runtime startup, and runtime inspection.
 
 ## Quick start
 
@@ -64,6 +63,7 @@ await runtime.dispose();
 - Expose runtime state over REST and WebSocket.
 - Persist events and state snapshots for debugging and auditability.
 - Run declarative automation rules triggered by device events.
+- Inspect plugin catalogs and scheduled jobs through the admin API or CLI.
 
 ## Package documentation
 

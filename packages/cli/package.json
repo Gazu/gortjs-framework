@@ -1,0 +1,17 @@
+{
+  "name": "@gortjs/cli",
+  "version": "0.6.0",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "files": ["dist"],
+  "bin": {
+    "gortjs": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc -b"
+  },
+  "dependencies": {
+    "@gortjs/core": "0.6.0",
+    "@gortjs/rest": "0.6.0"
+  }
+}
