@@ -1,4 +1,4 @@
-import { EventSerializer, type Cleanup, type EventBusContract, type TransportEventMessage } from '@gortjs/contracts';
+import { EventSerializer, createTimestamp, type Cleanup, type EventBusContract, type TransportEventMessage } from '@gortjs/contracts';
 import WebSocket, { WebSocketServer } from 'ws';
 
 type EventHandler = (payload: unknown) => void;
@@ -133,7 +133,7 @@ export class WebSocketEventBus implements EventBusContract {
     const wildcardPayload = {
       eventName,
       payload,
-      timestamp: new Date().toISOString(),
+      timestamp: createTimestamp(),
     };
 
     for (const handler of this.handlers.get(eventName) ?? []) {

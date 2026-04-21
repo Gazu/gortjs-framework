@@ -32,6 +32,37 @@ function mergeProfile(base: IoTAppConfig, profile?: RuntimeProfileConfig): IoTAp
   };
 }
 
+function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConfig {
+  const configDir = dirname(filePath);
+  const resolveMaybe = (target?: string): string | undefined => {
+    if (!target || isAbsolute(target)) {
+      return target;
+    }
+
+    return resolve(configDir, target);
+  };
+
+  if (config.persistence?.directory) {
+    config.persistence.directory = resolveMaybe(config.persistence.directory)!;
+  }
+
+  if (config.rest?.auth?.publicKeyFile) {
+    config.rest.auth.publicKeyFile = resolveMaybe(config.rest.auth.publicKeyFile)!;
+  }
+
+  for (const profile of Object.values(config.profiles ?? {})) {
+    if (profile.persistence?.directory) {
+      profile.persistence.directory = resolveMaybe(profile.persistence.directory)!;
+    }
+
+    if (profile.rest?.auth?.publicKeyFile) {
+      profile.rest.auth.publicKeyFile = resolveMaybe(profile.rest.auth.publicKeyFile)!;
+    }
+  }
+
+  return config;
+}
+
 export type AppRuntimeOptions = {
   plugins?: GortPlugin[];
   deviceTypes?: Record<string, DeviceConstructor>;
@@ -67,6 +98,7 @@ export class AppRuntime {
       driverInstance: plugins.createDriver(effectiveConfig.runtime?.driver ?? 'johnny-five'),
       deviceTypes: plugins.getDeviceTypes(),
       persistence: effectiveConfig.persistence,
+      timeZone: effectiveConfig.runtime?.timezone,
     });
     await app.configure(effectiveConfig);
 
@@ -85,19 +117,7 @@ export class AppRuntime {
 
   static async fromFile(filePath: string): Promise<AppRuntime> {
     const raw = await readFile(filePath, 'utf8');
-    const config = JSON.parse(raw) as IoTAppConfig;
-
-    if (config.persistence?.directory && !isAbsolute(config.persistence.directory)) {
-      config.persistence.directory = resolve(dirname(filePath), config.persistence.directory);
-    }
-
-    if (
-      config.rest?.auth?.publicKeyFile
-      && !isAbsolute(config.rest.auth.publicKeyFile)
-    ) {
-      config.rest.auth.publicKeyFile = resolve(dirname(filePath), config.rest.auth.publicKeyFile);
-    }
-
+    const config = resolveRuntimePaths(JSON.parse(raw) as IoTAppConfig, filePath);
     return this.fromConfig(config);
   }
 

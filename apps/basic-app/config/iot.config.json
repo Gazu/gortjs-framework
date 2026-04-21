@@ -1,6 +1,7 @@
 {
   "runtime": {
-    "driver": "mock"
+    "driver": "mock",
+    "timezone": "America/Santiago"
   },
   "devices": [
     {

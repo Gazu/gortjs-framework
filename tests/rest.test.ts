@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { generateKeyPairSync, createSign } from 'node:crypto';
-import { mkdtemp } from 'node:fs/promises';
+import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -105,7 +105,7 @@ function signJwt(
 test('AppRuntime boots a complete config and exposes operational REST and WebSocket endpoints', async () => {
   const persistenceDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-runtime-'));
   const runtime = await AppRuntime.fromConfig({
-    runtime: { driver: 'mock' },
+    runtime: { driver: 'mock', timezone: 'America/Santiago' },
     rest: {
       host: '127.0.0.1',
       port: 0,
@@ -131,6 +131,7 @@ test('AppRuntime boots a complete config and exposes operational REST and WebSoc
   const statusResponse = await requestJson(`${rest.getUrl()}/status`);
   assert.equal(statusResponse.status, 200);
   assert.equal((statusResponse.body as { status: string }).status, 'running');
+  assert.equal((statusResponse.body as { timeZone: string }).timeZone, 'America/Santiago');
 
   const snapshotResponse = await requestJson(`${rest.getUrl()}/snapshot`);
   assert.equal(snapshotResponse.status, 200);
@@ -378,5 +379,89 @@ test('REST and WebSocket auth validate JWT signatures, claims, and scopes', asyn
     },
   );
   socket.close();
+  await runtime.dispose();
+});
+
+test('JWT auth reloads the public key file and diagnostics expose auth health', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-auth-reload-'));
+  const keysDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-keys-'));
+  const keyFile = join(keysDir, 'jwt-public.pem');
+  const pairOne = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+  const pairTwo = generateKeyPairSync('rsa', {
+    modulusLength: 2048,
+    publicKeyEncoding: { type: 'spki', format: 'pem' },
+    privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
+  });
+
+  await writeFile(keyFile, pairOne.publicKey, 'utf8');
+
+  const runtime = await AppRuntime.fromConfig({
+    runtime: { driver: 'mock' },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+      auth: {
+        mode: 'jwt',
+        publicKeyFile: keyFile,
+        issuer: 'https://auth.gortjs.local',
+        audience: 'gortjs-basic-app',
+        scopeClaim: 'scope',
+        scopes: {
+          'status:read': ['gortjs:read'],
+          'health:deep:read': ['gortjs:read'],
+        },
+      },
+    },
+    persistence: { directory: persistenceDir },
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+  });
+
+  const tokenOne = signJwt(pairOne.privateKey, {
+    iss: 'https://auth.gortjs.local',
+    aud: 'gortjs-basic-app',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    scope: 'gortjs:read',
+  });
+  const tokenTwo = signJwt(pairTwo.privateKey, {
+    iss: 'https://auth.gortjs.local',
+    aud: 'gortjs-basic-app',
+    exp: Math.floor(Date.now() / 1000) + 3600,
+    scope: 'gortjs:read',
+  });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  const initial = await requestJson(`${rest.getUrl()}/status`, {
+    headers: { Authorization: `Bearer ${tokenOne}` },
+  });
+  assert.equal(initial.status, 200);
+
+  await sleep(20);
+  await writeFile(keyFile, pairTwo.publicKey, 'utf8');
+  await sleep(20);
+
+  const stale = await requestJson(`${rest.getUrl()}/status`, {
+    headers: { Authorization: `Bearer ${tokenOne}` },
+  });
+  assert.equal(stale.status, 401);
+
+  const refreshed = await requestJson(`${rest.getUrl()}/status`, {
+    headers: { Authorization: `Bearer ${tokenTwo}` },
+  });
+  assert.equal(refreshed.status, 200);
+
+  const diagnostics = await requestJson(`${rest.getUrl()}/diagnostics`, {
+    headers: { Authorization: `Bearer ${tokenTwo}` },
+  });
+  assert.equal(diagnostics.status, 200);
+  assert.equal((diagnostics.body as { auth: { source: string } }).auth.source, 'file');
+  assert.equal((diagnostics.body as { health: { app: { workflowCount: number } } }).health.app.workflowCount, 0);
+
   await runtime.dispose();
 });

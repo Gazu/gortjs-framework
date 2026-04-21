@@ -5,7 +5,7 @@ import type {
   GenericComponentConfig,
   GenericComponentKind,
 } from '@gortjs/contracts';
-import { deviceEventNames } from '@gortjs/contracts';
+import { createTimestamp, deviceEventNames } from '@gortjs/contracts';
 import { BaseDevice } from './base-device';
 
 function getValueAtPath(source: unknown, path?: string): unknown {
@@ -67,7 +67,7 @@ export class GenericComponentDevice extends BaseDevice {
     if (this.initialState) {
       this.lastState = {
         ...this.initialState,
-        updatedAt: new Date().toISOString(),
+        updatedAt: createTimestamp(),
       };
     }
 
@@ -89,7 +89,7 @@ export class GenericComponentDevice extends BaseDevice {
       command: normalized.name,
       args,
       result,
-      updatedAt: new Date().toISOString(),
+      updatedAt: createTimestamp(),
     };
     this.emit(deviceEventNames.stateChanged(this.id), { state: this.lastState });
   }
@@ -109,7 +109,7 @@ export class GenericComponentDevice extends BaseDevice {
         this.lastState = {
           value,
           state,
-          updatedAt: new Date().toISOString(),
+          updatedAt: createTimestamp(),
         };
 
         const targetEvent = eventConfig.targetEvent
