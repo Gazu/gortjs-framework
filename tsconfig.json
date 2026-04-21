@@ -7,6 +7,7 @@
     { "path": "./packages/devices" },
     { "path": "./packages/core" },
     { "path": "./packages/rest" },
+    { "path": "./packages/cli" },
     { "path": "./apps/basic-app" }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "name": "gortjs-framework",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "workspaces": [
     "packages/*",
@@ -10,6 +10,7 @@
     "build": "tsc -b",
     "clean": "find . -name dist -type d -prune -exec rm -rf {} + && find . -name '*.tsbuildinfo' -delete",
     "start": "tsx apps/basic-app/src/main.ts",
+    "cli": "tsx packages/cli/src/index.ts",
     "test": "node --import tsx --test tests/*.test.ts"
   },
   "devDependencies": {

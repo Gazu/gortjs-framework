@@ -11,10 +11,12 @@ import {
   EventHistoryQuery,
   IoTAppHealth,
   IoTAppConfig,
+  IoTAppImportSnapshot,
   IoTAppMetrics,
   IoTAppSnapshot,
   IoTAppStatus,
   SupportedDriverName,
+  WorkflowJobStatus,
   WorkflowDefinition,
   PersistenceProvider,
   PersistenceConfig,
@@ -226,6 +228,10 @@ export class IoTApp {
     return this.workflowEngine.list();
   }
 
+  getWorkflowJobs(): WorkflowJobStatus[] {
+    return this.workflowEngine.listJobs();
+  }
+
   getDevice(deviceId: string): BaseDeviceContract {
     return this.registry.get(deviceId);
   }
@@ -391,6 +397,24 @@ export class IoTApp {
       rules: this.getRules(),
       workflows: this.getWorkflows(),
     };
+  }
+
+  async applySnapshot(snapshot: IoTAppImportSnapshot): Promise<void> {
+    this.assertMutable('apply snapshot');
+    await this.registry.disposeAll();
+    this.registry.clear();
+    this.clearRules();
+    this.clearWorkflows();
+
+    for (const device of snapshot.devices ?? []) {
+      this.registerDevice(device);
+    }
+    if (snapshot.rules?.length) {
+      this.registerRules(snapshot.rules);
+    }
+    if (snapshot.workflows?.length) {
+      this.registerWorkflows(snapshot.workflows);
+    }
   }
 
   private assertMutable(action: string): void {

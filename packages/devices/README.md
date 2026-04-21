@@ -2,7 +2,7 @@
 
 `@gortjs/devices` contains the GortJS device model: base classes, actuators, sensors, and generic component devices.
 
-Documented for release `0.5.0`.
+Documented for release `0.6.0`.
 
 ## Purpose
 
@@ -16,7 +16,7 @@ Documented for release `0.5.0`.
 - Actuators: `LedDevice`, `RelayDevice`, `MotorDevice`, `ServoDevice`, `PiezoDevice`
 - Sensors: `TemperatureSensorDevice`, `ThermometerDevice`, `ButtonDevice`, `ProximityDevice`
 
-## 0.5.0 highlights
+## 0.6.0 highlights
 
 - clearer lifecycle state transitions
 - public `getStatus()` support through the shared contract
