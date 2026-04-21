@@ -1,5 +1,5 @@
 import type { ActuatorDeviceContract } from '@gortjs/contracts';
-import { deviceEventNames } from '@gortjs/contracts';
+import { createTimestamp, deviceEventNames } from '@gortjs/contracts';
 import { BaseDevice } from './base-device';
 
 export abstract class ActuatorDevice extends BaseDevice implements ActuatorDeviceContract {
@@ -8,7 +8,7 @@ export abstract class ActuatorDevice extends BaseDevice implements ActuatorDevic
   protected setActuatorState(state: Record<string, unknown>): void {
     this.lastState = {
       ...state,
-      updatedAt: new Date().toISOString(),
+      updatedAt: createTimestamp(),
     };
 
     this.emit(deviceEventNames.stateChanged(this.id), { state: this.lastState });

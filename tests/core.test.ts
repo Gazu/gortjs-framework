@@ -274,6 +274,28 @@ test('fails fast with clear config validation errors before startup', async () =
       return true;
     },
   );
+
+  await writeFile(
+    configPath,
+    JSON.stringify({
+      runtime: {
+        timezone: 'Mars/Olympus',
+      },
+      devices: [
+        { id: 'led1', type: 'led', pin: 13 },
+      ],
+    }),
+    'utf8',
+  );
+
+  await assert.rejects(
+    () => app.configureFromFile(configPath),
+    (error: unknown) => {
+      assert.ok(error instanceof ConfigValidationError);
+      assert.match(error.message, /runtime\.timezone: invalid IANA time zone 'Mars\/Olympus'/);
+      return true;
+    },
+  );
 });
 
 test('persists events and state snapshots to disk', async () => {
@@ -344,6 +366,40 @@ test('reports deep health and rotates event logs with backups', async () => {
   assert.equal(health.persistence.initialized, true);
   assert.ok(health.persistence.backups.length > 0);
   assert.ok(health.persistence.backups.length <= 2);
+  assert.equal(health.app.workflowCount, 0);
+});
+
+test('recovers from corrupted persistence files and reports diagnostics', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'iot-persist-corrupted-'));
+  await writeFile(join(persistenceDir, 'state.json'), '{invalid json', 'utf8');
+  await writeFile(join(persistenceDir, 'events.jsonl'), [
+    '{"eventName":"device:led1:command:executed","payload":{"deviceId":"led1"},"timestamp":"2026-01-01T00:00:00.000Z"}',
+    '{bad json',
+  ].join('\n'), 'utf8');
+
+  const app = new IoTApp({
+    driver: 'mock',
+    persistence: {
+      directory: persistenceDir,
+      maxEvents: 50,
+    },
+  });
+
+  app.registerDevice({
+    id: 'led1',
+    type: 'led',
+    pin: 13,
+  });
+
+  await app.start();
+  const history = app.getEventHistory();
+  const health = await app.getHealth();
+  await app.stop();
+
+  assert.ok(history.length >= 1);
+  assert.equal(health.persistence.stateRecovered, true);
+  assert.equal(health.persistence.corruptedEntries, 1);
+  assert.match(health.persistence.lastError ?? '', /Failed to parse event log entry|Failed to load persisted state/);
 });
 
 test('supports plugin-based drivers and device types through runtime profiles', async () => {
@@ -456,6 +512,33 @@ test('supports compound rules, workflows, scheduling, metrics, and filtered even
   });
   assert.ok(filteredEvents.total >= 1);
   assert.ok(filteredEvents.events.some((event) => event.eventName.includes('led1')));
+
+  await app.stop();
+});
+
+test('applies the configured runtime timezone to health and emitted timestamps', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'iot-timezone-'));
+  const app = new IoTApp({
+    driver: 'mock',
+    timeZone: 'America/Santiago',
+    persistence: {
+      directory: persistenceDir,
+      maxEvents: 50,
+    },
+  });
+
+  app.registerDevice({ id: 'led1', type: 'led', pin: 13 });
+
+  await app.start();
+  await app.command('led1', 'on');
+  await sleep(20);
+
+  const health = await app.getHealth();
+  const history = app.getEventHistory();
+
+  assert.equal(health.app.timeZone, 'America/Santiago');
+  assert.ok(history.some((entry) => /[+-]\d{2}:\d{2}$/.test(entry.timestamp)));
+  assert.ok(history.every((entry) => !entry.timestamp.endsWith('Z')));
 
   await app.stop();
 });

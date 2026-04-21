@@ -1,5 +1,5 @@
 import { EventEmitter } from 'node:events';
-import type { EventBusContract } from '@gortjs/contracts';
+import { createTimestamp, type EventBusContract } from '@gortjs/contracts';
 
 export class EventBus implements EventBusContract {
   private readonly emitter = new EventEmitter();
@@ -27,7 +27,7 @@ export class EventBus implements EventBusContract {
     this.emitter.emit('*', {
       eventName,
       payload,
-      timestamp: new Date().toISOString(),
+      timestamp: createTimestamp(),
     });
   }
 }

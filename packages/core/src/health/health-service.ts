@@ -23,6 +23,7 @@ export class HealthService {
       getPersistence: () => PersistenceProvider | undefined;
       getAppStatus: () => IoTAppStatus;
       getMetrics: () => IoTAppMetrics;
+      getTimeZone: () => string | undefined;
     },
   ) {}
 
@@ -45,9 +46,11 @@ export class HealthService {
       ok: board.ready && (!persistenceHealth.enabled || persistenceHealth.writable),
       app: {
         status: this.params.getAppStatus(),
+        timeZone: this.params.getTimeZone(),
         deviceCount: this.params.registry.count(),
         deviceTypeCount: this.params.deviceTypeRegistry.list().length,
         ruleCount: this.params.ruleEngine.list().length,
+        workflowCount: this.params.workflowEngine.list().length,
       },
       board,
       eventBus: {

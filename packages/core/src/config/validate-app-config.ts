@@ -1,4 +1,4 @@
-import type {
+import {
   AutomationRule,
   AutomationRuleCondition,
   ConfigValidationIssue,
@@ -6,11 +6,26 @@ import type {
   DeviceConstructor,
   IoTAppConfig,
   WorkflowDefinition,
+  isValidTimeZone,
 } from '@gortjs/contracts';
 import { ConfigValidationError } from './config-validation-error';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function pushIssue(
+  issues: ConfigValidationIssue[],
+  path: string,
+  message: string,
+  received?: unknown,
+): void {
+  issues.push({
+    path,
+    message,
+    section: path.split(/[.[\]]/, 1)[0] ?? 'config',
+    receivedType: typeof received !== 'undefined' ? typeof received : undefined,
+  });
 }
 
 function validateDeviceConfig(
@@ -275,19 +290,24 @@ export function validateAppConfig(
   const workflows = Array.isArray(config.workflows) ? config.workflows : [];
 
   if (!isPlainObject(config)) {
-    throw new ConfigValidationError([{ path: 'config', message: 'must be an object' }]);
+    throw new ConfigValidationError([{
+      path: 'config',
+      message: 'must be an object',
+      section: 'config',
+      receivedType: typeof config,
+    }]);
   }
 
   if (typeof config.devices !== 'undefined' && !Array.isArray(config.devices)) {
-    issues.push({ path: 'devices', message: 'must be an array when provided' });
+    pushIssue(issues, 'devices', 'must be an array when provided', config.devices);
   }
 
   if (typeof config.rules !== 'undefined' && !Array.isArray(config.rules)) {
-    issues.push({ path: 'rules', message: 'must be an array when provided' });
+    pushIssue(issues, 'rules', 'must be an array when provided', config.rules);
   }
 
   if (typeof config.workflows !== 'undefined' && !Array.isArray(config.workflows)) {
-    issues.push({ path: 'workflows', message: 'must be an array when provided' });
+    pushIssue(issues, 'workflows', 'must be an array when provided', config.workflows);
   }
 
   if (typeof config.rest !== 'undefined') {
@@ -370,6 +390,14 @@ export function validateAppConfig(
 
       if (typeof config.runtime.profile !== 'undefined' && typeof config.runtime.profile !== 'string') {
         issues.push({ path: 'runtime.profile', message: 'must be a string' });
+      }
+
+      if (typeof config.runtime.timezone !== 'undefined') {
+        if (typeof config.runtime.timezone !== 'string' || config.runtime.timezone.trim() === '') {
+          issues.push({ path: 'runtime.timezone', message: 'must be a non-empty string' });
+        } else if (!isValidTimeZone(config.runtime.timezone)) {
+          issues.push({ path: 'runtime.timezone', message: `invalid IANA time zone '${config.runtime.timezone}'` });
+        }
       }
     }
   }

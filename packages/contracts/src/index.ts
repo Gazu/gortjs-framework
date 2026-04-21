@@ -9,3 +9,4 @@ export * from './events/event-names';
 export * from './events/event-types';
 export * from './persistence/persistence-types';
 export * from './serialization/event-serializer';
+export * from './time/timezone';

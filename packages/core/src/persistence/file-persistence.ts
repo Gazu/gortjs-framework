@@ -9,7 +9,7 @@ import {
   writeFile,
 } from 'node:fs/promises';
 import { join } from 'node:path';
-import type {
+import {
   BackupFileInfo,
   Cleanup,
   DeviceState,
@@ -20,6 +20,8 @@ import type {
   PersistenceProvider,
   PersistenceHealth,
   PersistenceConfig,
+  createTimestamp,
+  parseTimestamp,
 } from '@gortjs/contracts';
 
 type PersistedState = {
@@ -40,6 +42,9 @@ export class FilePersistence implements PersistenceProvider {
   private readonly maxBackups: number;
   private lastRotationAt?: string;
   private writable = true;
+  private corruptedEntries = 0;
+  private stateRecovered = false;
+  private lastError?: string;
 
   constructor(
     private readonly params: {
@@ -101,11 +106,11 @@ export class FilePersistence implements PersistenceProvider {
         return false;
       }
 
-      if (query.from && entry.timestamp < query.from) {
+      if (query.from && parseTimestamp(entry.timestamp) < parseTimestamp(query.from)) {
         return false;
       }
 
-      if (query.to && entry.timestamp > query.to) {
+      if (query.to && parseTimestamp(entry.timestamp) > parseTimestamp(query.to)) {
         return false;
       }
 
@@ -146,6 +151,9 @@ export class FilePersistence implements PersistenceProvider {
       lastRotationAt: this.lastRotationAt,
       backups,
       writable: this.writable,
+      corruptedEntries: this.corruptedEntries,
+      stateRecovered: this.stateRecovered,
+      lastError: this.lastError,
     };
   }
 
@@ -166,6 +174,7 @@ export class FilePersistence implements PersistenceProvider {
       }
     }).catch((error) => {
       this.writable = false;
+      this.lastError = error instanceof Error ? error.message : String(error);
       throw error;
     });
 
@@ -219,7 +228,7 @@ export class FilePersistence implements PersistenceProvider {
   private async persistStateSnapshot(): Promise<void> {
     const snapshot: PersistedState = {
       devices: Object.fromEntries(this.deviceStates.entries()),
-      updatedAt: new Date().toISOString(),
+      updatedAt: createTimestamp(),
     };
 
     await writeFile(this.stateFile, JSON.stringify(snapshot, null, 2), 'utf8');
@@ -233,9 +242,12 @@ export class FilePersistence implements PersistenceProvider {
         this.deviceStates.set(deviceId, deviceState);
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
       }
+
+      this.stateRecovered = true;
+      this.lastError = `Failed to load persisted state: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 
@@ -249,12 +261,20 @@ export class FilePersistence implements PersistenceProvider {
         .slice(-this.maxEvents);
 
       for (const line of lines) {
-        this.eventHistory.push(JSON.parse(line) as EventHistoryEntry);
+        try {
+          this.eventHistory.push(JSON.parse(line) as EventHistoryEntry);
+        } catch (error) {
+          this.corruptedEntries += 1;
+          this.lastError = `Failed to parse event log entry: ${error instanceof Error ? error.message : String(error)}`;
+        }
       }
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') {
-        throw error;
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return;
       }
+
+      this.stateRecovered = true;
+      this.lastError = `Failed to load event history: ${error instanceof Error ? error.message : String(error)}`;
     }
   }
 
@@ -272,7 +292,7 @@ export class FilePersistence implements PersistenceProvider {
       const rotatedFile = `${this.eventLogFile}.${Date.now()}.bak`;
       await copyFile(this.eventLogFile, rotatedFile);
       await writeFile(this.eventLogFile, '', 'utf8');
-      this.lastRotationAt = new Date().toISOString();
+      this.lastRotationAt = createTimestamp();
       await this.pruneBackups();
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
@@ -298,7 +318,7 @@ export class FilePersistence implements PersistenceProvider {
         backups.push({
           path: filePath,
           sizeBytes: fileStats.size,
-          createdAt: fileStats.birthtime.toISOString(),
+          createdAt: createTimestamp(fileStats.birthtime),
         });
       }
 

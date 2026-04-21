@@ -1,4 +1,4 @@
-import type {
+import {
   AutomationRule,
   BaseDeviceContract,
   DeviceCommand,
@@ -18,6 +18,7 @@ import type {
   WorkflowDefinition,
   PersistenceProvider,
   PersistenceConfig,
+  configureTimeZone,
 } from '@gortjs/contracts';
 import { appEventNames } from '@gortjs/contracts';
 import { EventBus } from '@gortjs/events';
@@ -70,6 +71,7 @@ type IoTAppOptions = {
   persistenceProvider?: PersistenceProvider;
   rules?: AutomationRule[];
   workflows?: WorkflowDefinition[];
+  timeZone?: string;
 };
 
 export class IoTApp {
@@ -85,9 +87,12 @@ export class IoTApp {
   private readonly healthService: HealthService;
   private readonly metrics: AppMetricsService;
   private persistence?: PersistenceProvider;
+  private readonly timeZone?: string;
 
   constructor(
     private readonly options: IoTAppOptions = {}) {
+    this.timeZone = options.timeZone;
+    configureTimeZone(this.timeZone);
     this.driver = options.driverInstance ?? this.createDriver(options);
     this.eventBus = options.eventBus ?? new EventBus();
     this.boardManager = new BoardManager({ driver: this.driver, eventBus: this.eventBus });
@@ -141,6 +146,7 @@ export class IoTApp {
       getPersistence: () => this.persistence,
       getAppStatus: () => this.status,
       getMetrics: () => this.getMetrics(),
+      getTimeZone: () => this.timeZone,
     });
   }
 
@@ -150,6 +156,7 @@ export class IoTApp {
       board: config.runtime?.board,
       persistence: config.persistence,
       workflows: config.workflows,
+      timeZone: config.runtime?.timezone,
     });
   }
 
@@ -370,6 +377,10 @@ export class IoTApp {
 
   getStatus(): IoTAppStatus {
     return this.status;
+  }
+
+  getTimeZone(): string | undefined {
+    return this.timeZone;
   }
 
   getSnapshot(): IoTAppSnapshot {
