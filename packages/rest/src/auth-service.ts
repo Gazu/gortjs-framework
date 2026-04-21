@@ -51,8 +51,8 @@ function ensureScopes(required: string[], available: string[]): boolean {
 }
 
 export class AuthService {
-  private publicKey?: string;
-  private publicKeyMtimeMs?: number;
+  private publicKeys: string[] = [];
+  private publicKeyMtimeMs = new Map<string, number>();
   private lastLoadedAt?: string;
   private lastReloadAt?: string;
   private lastReloadError?: string;
@@ -65,12 +65,12 @@ export class AuthService {
     }
 
     if (this.config.publicKey) {
-      this.publicKey = this.config.publicKey;
+      this.publicKeys = [this.config.publicKey];
       this.lastLoadedAt = createTimestamp();
       return;
     }
 
-    if (this.config.publicKeyFile) {
+    if (this.config.publicKeyFile || this.config.publicKeyFiles?.length) {
       await this.reloadPublicKeyIfNeeded(true);
     }
   }
@@ -176,18 +176,19 @@ export class AuthService {
         return { ok: false, statusCode: 401, error: `Unsupported JWT algorithm '${algorithm}'`, scopes: [] };
       }
 
-      if (!this.publicKey) {
+      if (this.publicKeys.length === 0) {
         return { ok: false, statusCode: 401, error: 'JWT public key is not configured', scopes: [] };
       }
 
-      const verifier = createVerify('RSA-SHA256');
-      verifier.update(`${headerSegment}.${payloadSegment}`);
-      verifier.end();
-
-      const validSignature = verifier.verify(
-        createPublicKey(this.publicKey),
-        Buffer.from(signatureSegment.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
-      );
+      const validSignature = this.publicKeys.some((key) => {
+        const verifier = createVerify('RSA-SHA256');
+        verifier.update(`${headerSegment}.${payloadSegment}`);
+        verifier.end();
+        return verifier.verify(
+          createPublicKey(key),
+          Buffer.from(signatureSegment.replace(/-/g, '+').replace(/_/g, '/'), 'base64'),
+        );
+      });
 
       if (!validSignature) {
         return { ok: false, statusCode: 401, error: 'Invalid JWT signature', scopes: [] };
@@ -233,18 +234,32 @@ export class AuthService {
   }
 
   private async reloadPublicKeyIfNeeded(force = false): Promise<void> {
-    if (this.config?.mode !== 'jwt' || !this.config.publicKeyFile) {
+    if (this.config?.mode !== 'jwt') {
       return;
     }
 
     try {
-      const fileStats = await stat(this.config.publicKeyFile);
-      if (!force && typeof this.publicKeyMtimeMs !== 'undefined' && this.publicKeyMtimeMs === fileStats.mtimeMs) {
-        return;
+      const nextKeys = this.config.publicKey ? [this.config.publicKey] : [];
+      const files = [
+        ...(this.config.publicKeyFile ? [this.config.publicKeyFile] : []),
+        ...(this.config.publicKeyFiles ?? []),
+      ];
+
+      for (const file of files) {
+        const fileStats = await stat(file);
+        if (!force && this.publicKeyMtimeMs.get(file) === fileStats.mtimeMs) {
+          const cached = this.publicKeys.find((key) => key.includes('BEGIN PUBLIC KEY'));
+          if (cached) {
+            nextKeys.push(cached);
+          }
+          continue;
+        }
+
+        nextKeys.push(await readFile(file, 'utf8'));
+        this.publicKeyMtimeMs.set(file, fileStats.mtimeMs);
       }
 
-      this.publicKey = await readFile(this.config.publicKeyFile, 'utf8');
-      this.publicKeyMtimeMs = fileStats.mtimeMs;
+      this.publicKeys = nextKeys.filter(Boolean);
       this.lastReloadAt = createTimestamp();
       if (!this.lastLoadedAt) {
         this.lastLoadedAt = this.lastReloadAt;
@@ -252,7 +267,7 @@ export class AuthService {
       this.lastReloadError = undefined;
     } catch (error) {
       this.lastReloadError = error instanceof Error ? error.message : String(error);
-      if (!this.publicKey) {
+      if (this.publicKeys.length === 0) {
         throw error;
       }
     }

@@ -1,11 +1,16 @@
 import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AutomationRule, DeviceConfig, IoTAppImportSnapshot, IoTAppStatus, RestAuthConfig, RuntimeAdminProvider, WorkflowDefinition } from '@gortjs/contracts';
+import type { AutomationRule, DeviceConfig, IoTAppImportSnapshot, IoTAppStatus, RestAuthConfig, RuntimeAdminProvider, RuntimeClusterConfig, WebSocketSlowClientPolicy, WorkflowDefinition } from '@gortjs/contracts';
 import { EventSerializer, createTimestamp } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
-import { WebSocketServer } from 'ws';
+import WebSocket, { WebSocketServer } from 'ws';
 import { AuthService } from './auth-service';
+
+type WebSocketClientFilter = {
+  eventName?: string;
+  deviceId?: string;
+};
 
 export class RestServer {
   private readonly expressApp = express();
@@ -13,6 +18,7 @@ export class RestServer {
   private websocketServer?: WebSocketServer;
   private eventBusCleanup?: () => void;
   private readonly authService: AuthService;
+  private readonly websocketClientFilters = new WeakMap<WebSocket, WebSocketClientFilter>();
   private readonly metrics = {
     requests: 0,
     authFailures: 0,
@@ -27,7 +33,14 @@ export class RestServer {
       host?: string;
       port?: number;
       websocketPath?: string;
+      websocket?: {
+        path?: string;
+        replayLimit?: number;
+        maxBufferedBytes?: number;
+        slowClientPolicy?: WebSocketSlowClientPolicy;
+      };
       auth?: RestAuthConfig;
+      cluster?: RuntimeClusterConfig;
     }
   ) {
     this.authService = new AuthService(params.auth);
@@ -59,6 +72,25 @@ export class RestServer {
 
       next();
     };
+  }
+
+  private requireClusterToken(req: Request, res: Response, next: () => void): void {
+    const expectedToken = this.params.cluster?.sharedToken;
+    if (!expectedToken) {
+      next();
+      return;
+    }
+
+    const received = Array.isArray(req.headers['x-gort-cluster-token'])
+      ? req.headers['x-gort-cluster-token'][0]
+      : req.headers['x-gort-cluster-token'];
+
+    if (received !== expectedToken) {
+      res.status(401).json({ ok: false, error: 'Invalid cluster token' });
+      return;
+    }
+
+    next();
   }
 
   private configureRoutes(): void {
@@ -206,6 +238,67 @@ export class RestServer {
       });
     });
 
+    this.expressApp.get('/cluster', this.requireAuth('runtime:read'), (_req: Request, res: Response) => {
+      res.json(this.params.admin?.getClusterState?.() ?? {
+        enabled: false,
+        nodeId: 'local-node',
+        role: 'standalone',
+        remoteCommandRouting: false,
+        nodes: [],
+        recentEvents: [],
+      });
+    });
+
+    this.expressApp.get('/cluster/nodes', this.requireAuth('runtime:read'), (_req: Request, res: Response) => {
+      res.json({
+        nodes: this.params.admin?.listClusterNodes?.() ?? [],
+      });
+    });
+
+    this.expressApp.post('/cluster/nodes/register', this.requireClusterToken.bind(this), (
+      req: Request<unknown, unknown, Record<string, unknown>>,
+      res: Response,
+    ) => {
+      this.params.admin?.registerClusterNode?.(req.body as never);
+      res.json({
+        ok: true,
+        nodes: this.params.admin?.listClusterNodes?.() ?? [],
+      });
+    });
+
+    this.expressApp.post('/cluster/events', this.requireClusterToken.bind(this), (
+      req: Request<unknown, unknown, { nodeId?: string; entry?: { eventName?: string; timestamp?: string; payload?: unknown } }>,
+      res: Response,
+    ) => {
+      const nodeId = req.body?.nodeId;
+      const entry = req.body?.entry;
+      if (!nodeId || !entry?.eventName || !entry.timestamp) {
+        res.status(400).json({ ok: false, error: 'nodeId and entry are required' });
+        return;
+      }
+
+      this.params.admin?.recordClusterEvent?.({
+        nodeId,
+        eventName: entry.eventName,
+        timestamp: entry.timestamp,
+        payload: entry.payload,
+      });
+      res.json({ ok: true });
+    });
+
+    this.expressApp.post('/events/ingest', this.requireAuth('events:write'), (
+      req: Request<unknown, unknown, { eventName?: string; payload?: unknown; sourceNodeId?: string }>,
+      res: Response,
+    ) => {
+      if (!req.body?.eventName) {
+        res.status(400).json({ ok: false, error: 'eventName is required' });
+        return;
+      }
+
+      this.params.admin?.ingestEvent?.(req.body.eventName, req.body.payload, req.body.sourceNodeId);
+      res.json({ ok: true });
+    });
+
     this.expressApp.get('/persisted-state', this.requireAuth('persisted-state:read'), (_req: Request, res: Response) => {
       res.json({ devices: this.params.app.getPersistedDeviceStates() });
     });
@@ -264,9 +357,22 @@ export class RestServer {
           const state = await this.params.app.command(req.params.id, command, payload);
           res.json({ ok: true, state });
         } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          if ((message.includes('Unknown device') || message.includes('not found')) && this.params.admin?.routeCommand) {
+            const routed = await this.params.admin.routeCommand(req.params.id, command, payload);
+            if (routed.ok) {
+              res.json({
+                ok: true,
+                state: routed.state,
+                routedTo: routed.routedTo,
+              });
+              return;
+            }
+          }
+
           res.status(400).json({
             ok: false,
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: message,
           });
         }
       }
@@ -369,7 +475,7 @@ export class RestServer {
 
     this.websocketServer = new WebSocketServer({
       server: this.server,
-      path: this.params.websocketPath ?? '/ws',
+      path: this.params.websocket?.path ?? this.params.websocketPath ?? '/ws',
     });
 
     this.websocketServer.on('connection', async (socket, request) => {
@@ -382,14 +488,38 @@ export class RestServer {
       }
 
       this.metrics.websocketConnections += 1;
+      const url = new URL(request.url ?? '/', 'http://127.0.0.1');
+      const filter = {
+        eventName: url.searchParams.get('eventName') ?? undefined,
+        deviceId: url.searchParams.get('deviceId') ?? undefined,
+      };
+      this.websocketClientFilters.set(socket, filter);
+
+      const replayLimit = Math.min(
+        Number(url.searchParams.get('replay') ?? this.params.websocket?.replayLimit ?? 0),
+        this.params.websocket?.replayLimit ?? 50,
+      );
+      if (replayLimit > 0) {
+        const replayPage = this.params.app.queryEventHistory({
+          eventName: filter.eventName,
+          deviceId: filter.deviceId,
+          pageSize: Math.max(replayLimit, this.params.websocket?.replayLimit ?? replayLimit),
+        });
+        for (const entry of replayPage.events.slice(-replayLimit)) {
+          this.sendToWebSocketClient(socket, EventSerializer.stringifyEvent(entry));
+        }
+      }
+
       void this.params.app.getHealth().then((health) => {
-        socket.send(JSON.stringify({
+        this.sendToWebSocketClient(socket, JSON.stringify({
           eventName: 'ws:connected',
           payload: {
             devices: this.params.app.getDevices(),
             rules: this.params.app.getRules(),
             workflows: this.params.app.getWorkflows(),
             health,
+            filter,
+            replayed: replayLimit,
           },
           timestamp: createTimestamp(),
         }));
@@ -399,9 +529,16 @@ export class RestServer {
     this.eventBusCleanup = this.params.app.on('*', (entry) => {
       const message = EventSerializer.stringifyEvent(entry);
       for (const client of this.websocketServer?.clients ?? []) {
-        if (client.readyState === client.OPEN) {
-          client.send(message);
+        if (client.readyState !== client.OPEN) {
+          continue;
         }
+
+        const clientFilter = this.websocketClientFilters.get(client);
+        if (clientFilter && !this.matchesEventFilter(entry as Record<string, unknown>, clientFilter)) {
+          continue;
+        }
+
+        this.sendToWebSocketClient(client, message);
       }
     });
   }
@@ -465,7 +602,7 @@ export class RestServer {
       return undefined;
     }
 
-    return `ws://${this.params.host ?? '127.0.0.1'}:${port}${this.params.websocketPath ?? '/ws'}`;
+    return `ws://${this.params.host ?? '127.0.0.1'}:${port}${this.params.websocket?.path ?? this.params.websocketPath ?? '/ws'}`;
   }
 
   private async performLifecycleAction(action: string): Promise<IoTAppStatus> {
@@ -487,5 +624,31 @@ export class RestServer {
     }
 
     return this.params.app.getStatus();
+  }
+
+  private matchesEventFilter(entry: Record<string, unknown>, filter: WebSocketClientFilter): boolean {
+    if (filter.eventName && entry.eventName !== filter.eventName) {
+      return false;
+    }
+
+    const payload = entry.payload as Record<string, unknown> | undefined;
+    if (filter.deviceId && payload?.deviceId !== filter.deviceId) {
+      return false;
+    }
+
+    return true;
+  }
+
+  private sendToWebSocketClient(client: WebSocket, message: string): void {
+    const maxBufferedBytes = this.params.websocket?.maxBufferedBytes ?? 256 * 1024;
+    const slowClientPolicy = this.params.websocket?.slowClientPolicy ?? 'terminate';
+    if (client.bufferedAmount > maxBufferedBytes) {
+      if (slowClientPolicy === 'terminate') {
+        client.close(1013, 'Client is too slow');
+      }
+      return;
+    }
+
+    client.send(message);
   }
 }

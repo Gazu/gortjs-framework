@@ -2,7 +2,7 @@
 
 `@gortjs/rest` exposes an `IoTApp` instance over HTTP and WebSocket for control, observability, and live monitoring.
 
-Documented for release `0.6.0`.
+Documented for release `0.7.0`.
 
 ## Purpose
 
@@ -10,6 +10,7 @@ Documented for release `0.6.0`.
 - Expose operational health and persisted data.
 - Stream runtime events over WebSocket.
 - Include the configured runtime time zone in operational responses.
+- Support control-plane visibility, remote command routing, and cluster-aware runtime summaries.
 
 ## Main endpoints
 
@@ -21,6 +22,8 @@ Documented for release `0.6.0`.
 - `GET /plugins`
 - `GET /jobs`
 - `GET /runtime`
+- `GET /cluster`
+- `GET /cluster/nodes`
 - `GET /devices`
 - `GET /devices/:id`
 - `GET /device-types`
@@ -33,6 +36,9 @@ Documented for release `0.6.0`.
 - `POST /workflows`
 - `POST /workflows/:id/run`
 - `POST /snapshot/import`
+- `POST /events/ingest`
+- `POST /cluster/nodes/register`
+- `POST /cluster/events`
 - `DELETE /rules/:id`
 - `DELETE /workflows/:id`
 - `POST /lifecycle/:action`
@@ -58,11 +64,11 @@ const runtime = await AppRuntime.fromConfig({
 await runtime.start();
 ```
 
-## Why it matters in 0.6.0
+## Why it matters in 0.7.0
 
-- it exposes a true admin/runtime surface instead of only device control endpoints
-- it makes plugin catalogs, scheduler jobs, and runtime configuration inspectable over HTTP
-- it supports workflow operations and snapshot import as first-class runtime actions
+- it can act as the REST edge for a connected multi-node topology
+- it exposes cluster state and remote command routing through the same operational surface
+- it upgrades WebSocket delivery with replay, filtering, and slow-client protection
 
 ## curl example
 

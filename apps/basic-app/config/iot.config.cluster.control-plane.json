@@ -1,0 +1,25 @@
+{
+  "runtime": {
+    "driver": "mock",
+    "timezone": "America/Santiago",
+    "cluster": {
+      "role": "control-plane",
+      "nodeId": "control-plane",
+      "advertisedUrl": "http://127.0.0.1:4000",
+      "sharedToken": "cluster-secret",
+      "remoteCommandRouting": true,
+      "syncEvents": true,
+      "syncState": true,
+      "heartbeatIntervalMs": 5000
+    }
+  },
+  "rest": {
+    "host": "127.0.0.1",
+    "port": 4000,
+    "websocketPath": "/ws"
+  },
+  "persistence": {
+    "adapter": "memory",
+    "maxEvents": 500
+  }
+}

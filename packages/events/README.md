@@ -2,13 +2,14 @@
 
 `@gortjs/events` provides `EventBusContract` implementations for local and distributed event flows.
 
-Documented for release `0.6.0`.
+Documented for release `0.7.0`.
 
 ## Purpose
 
 - Publish and consume runtime events.
 - Support in-memory, WebSocket, and Redis transports behind one contract.
 - Bridge GortJS with external processes and monitoring tools.
+- Serve as the event backbone for distributed runtimes and external adapters.
 
 ## Main classes
 
@@ -17,11 +18,11 @@ Documented for release `0.6.0`.
 - `RedisEventBus`: pub/sub transport powered by `redis`
 - `NoopEventBus`: no-op implementation for tests or dependency wiring
 
-## Why it matters in 0.6.0
+## Why it matters in 0.7.0
 
-- it supports the stronger runtime lifecycle introduced in `@gortjs/core`
-- it remains the common event surface for automation, persistence, and monitoring
-- it works with local, socket-based, and distributed topologies without changing app code
+- it stays compatible with local apps while enabling distributed event topologies
+- it backs Redis-based interoperability and replayable event streaming patterns
+- it provides the common event language used by control-plane and webhook integrations
 
 ## Installation
 
