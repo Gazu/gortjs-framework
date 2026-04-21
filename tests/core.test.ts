@@ -110,7 +110,7 @@ test('supports generic Johnny-Five component device types through the mock drive
   assert.equal((state.state?.command as string), 'print');
   assert.deepEqual(state.state?.args, ['hello world']);
 
-  await app.stop();
+  await app.dispose();
 });
 
 test('uses strong thermometer device while keeping generic coverage for the rest', async () => {
@@ -137,7 +137,7 @@ test('uses strong thermometer device while keeping generic coverage for the rest
   assert.equal(lastReading.deviceType, 'thermometer');
   assert.equal(typeof lastReading.payload.state.celsius, 'number');
 
-  await app.stop();
+  await app.dispose();
 });
 
 test('emits consistent command events with envelopes', async () => {
@@ -408,7 +408,15 @@ test('supports plugin-based drivers and device types through runtime profiles', 
   }
 
   const plugin: GortPlugin = {
-    name: 'loopback-plugin',
+    manifest: {
+      name: 'loopback-plugin',
+      version: '0.6.0',
+      apiVersion: '0.6',
+      capabilities: {
+        drivers: [{ id: 'loopback', driverName: 'loopback' }],
+        deviceTypes: [{ id: 'virtual-led' }],
+      },
+    },
     register(api) {
       api.registerDriver('loopback', () => new LoopbackDriver());
       api.registerDeviceType('virtual-led', LedDevice);
@@ -513,7 +521,50 @@ test('supports compound rules, workflows, scheduling, metrics, and filtered even
   assert.ok(filteredEvents.total >= 1);
   assert.ok(filteredEvents.events.some((event) => event.eventName.includes('led1')));
 
-  await app.stop();
+  await app.dispose();
+});
+
+test('supports cron jobs, queued concurrency, and branch workflow steps', async () => {
+  const app = new IoTApp({ driver: 'mock' });
+  app.registerDevice({ id: 'led1', type: 'led', pin: 13 });
+  app.registerDevice({ id: 'relay1', type: 'relay', pin: 7 });
+
+  app.registerWorkflow({
+    id: 'cron_branch',
+    trigger: {
+      schedule: {
+        cron: '*/1 * * * * *',
+        concurrency: 'queue',
+        runAtStartup: true,
+      },
+    },
+    steps: [
+      {
+        type: 'branch',
+        condition: { path: 'trigger', operator: 'includes', value: 'schedule' },
+        then: [
+          { type: 'command', deviceId: 'led1', command: 'toggle', retries: 1 },
+        ],
+        elseSteps: [
+          { type: 'command', deviceId: 'relay1', command: 'open' },
+        ],
+      },
+      { type: 'delay', ms: 25 },
+    ],
+  });
+
+  await app.start();
+  await sleep(1150);
+  const jobs = app.getWorkflowJobs();
+  const job = jobs.find((entry) => entry.workflowId === 'cron_branch');
+
+  assert.ok(job);
+  assert.equal(job?.kind, 'cron');
+  assert.equal(job?.concurrencyPolicy, 'queue');
+  assert.ok((job?.runCount ?? 0) >= 1);
+  assert.ok(job?.nextRunAt);
+
+  await app.dispose();
 });
 
 test('applies the configured runtime timezone to health and emitted timestamps', async () => {

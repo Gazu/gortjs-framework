@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import test from 'node:test';
 import WebSocket from 'ws';
 import type { IoTAppConfig } from '@gortjs/contracts';
+import type { GortPlugin } from '@gortjs/core';
 import { AppRuntime } from '@gortjs/rest';
 
 function sleep(ms: number): Promise<void> {
@@ -462,6 +463,77 @@ test('JWT auth reloads the public key file and diagnostics expose auth health', 
   assert.equal(diagnostics.status, 200);
   assert.equal((diagnostics.body as { auth: { source: string } }).auth.source, 'file');
   assert.equal((diagnostics.body as { health: { app: { workflowCount: number } } }).health.app.workflowCount, 0);
+
+  await runtime.dispose();
+});
+
+test('admin endpoints expose plugins, jobs, runtime summary, and snapshot import', async () => {
+  const persistenceDir = await mkdtemp(join(tmpdir(), 'gortjs-rest-admin-'));
+  const plugin: GortPlugin = {
+    manifest: {
+      name: 'admin-plugin',
+      version: '0.6.0',
+      apiVersion: '0.6',
+      capabilities: {
+        drivers: [{ id: 'mock', driverName: 'mock' }],
+        deviceTypes: [{ id: 'led' }],
+      },
+    },
+    register() {
+      return;
+    },
+  };
+
+  const runtime = await AppRuntime.fromConfig({
+    runtime: { driver: 'mock' },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+    },
+    plugins: [{ name: 'admin-plugin' }],
+    persistence: { directory: persistenceDir },
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+    workflows: [{
+      id: 'heartbeat',
+      trigger: {
+        schedule: {
+          everyMs: 1000,
+          runAtStartup: true,
+          concurrency: 'forbid',
+        },
+      },
+      steps: [{ type: 'command', deviceId: 'led1', command: 'toggle' }],
+    }],
+  }, { plugins: [plugin] });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  const pluginsResponse = await requestJson(`${rest.getUrl()}/plugins`);
+  assert.equal(pluginsResponse.status, 200);
+  assert.equal((pluginsResponse.body as { plugins: Array<{ name: string }> }).plugins[0]?.name, 'admin-plugin');
+
+  const jobsResponse = await requestJson(`${rest.getUrl()}/jobs`);
+  assert.equal(jobsResponse.status, 200);
+  assert.equal((jobsResponse.body as { jobs: Array<{ workflowId: string }> }).jobs[0]?.workflowId, 'heartbeat');
+
+  const runtimeResponse = await requestJson(`${rest.getUrl()}/runtime`);
+  assert.equal(runtimeResponse.status, 200);
+  assert.ok(((runtimeResponse.body as { availableDrivers: string[] }).availableDrivers).includes('mock'));
+
+  await requestJson(`${rest.getUrl()}/lifecycle/stop`, { method: 'POST' });
+  const importResponse = await requestJson(`${rest.getUrl()}/snapshot/import`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      devices: [{ id: 'relay1', type: 'relay', pin: 7 }],
+      workflows: [],
+      rules: [],
+    }),
+  });
+  assert.equal(importResponse.status, 200);
+  assert.equal((importResponse.body as { snapshot: { devices: Array<{ id: string }> } }).snapshot.devices[0]?.id, 'relay1');
 
   await runtime.dispose();
 });

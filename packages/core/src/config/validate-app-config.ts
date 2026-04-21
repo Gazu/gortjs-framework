@@ -209,11 +209,30 @@ function validateWorkflow(
   if (!Array.isArray(workflow.steps) || workflow.steps.length === 0) {
     issues.push({ path: `${path}.steps`, message: 'must be a non-empty array' });
   } else {
-    workflow.steps.forEach((step, stepIndex) => {
-      const stepPath = `${path}.steps[${stepIndex}]`;
+    const validateWorkflowStep = (step: unknown, stepPath: string): void => {
       if (!isPlainObject(step)) {
         issues.push({ path: stepPath, message: 'must be an object' });
         return;
+      }
+
+      const retries = (step as Record<string, unknown>).retries;
+      const retryDelayMs = (step as Record<string, unknown>).retryDelayMs;
+      const onError = (step as Record<string, unknown>).onError;
+
+      if (typeof step.if !== 'undefined') {
+        validateCondition(step.if, `${stepPath}.if`, issues);
+      }
+
+      if (typeof retries !== 'undefined' && (!Number.isInteger(retries) || Number(retries) < 0)) {
+        issues.push({ path: `${stepPath}.retries`, message: 'must be a non-negative integer' });
+      }
+
+      if (typeof retryDelayMs !== 'undefined' && (!Number.isFinite(retryDelayMs) || Number(retryDelayMs) < 0)) {
+        issues.push({ path: `${stepPath}.retryDelayMs`, message: 'must be a non-negative number' });
+      }
+
+      if (typeof onError !== 'undefined' && !['stop', 'continue'].includes(String(onError))) {
+        issues.push({ path: `${stepPath}.onError`, message: "must be 'stop' or 'continue'" });
       }
 
       switch (step.type) {
@@ -240,9 +259,28 @@ function validateWorkflow(
             issues.push({ path: `${stepPath}.workflowId`, message: 'must reference a known workflow' });
           }
           break;
+        case 'branch':
+          validateCondition(step.condition, `${stepPath}.condition`, issues);
+          if (!Array.isArray(step.then) || step.then.length === 0) {
+            issues.push({ path: `${stepPath}.then`, message: 'must be a non-empty array' });
+          } else {
+            step.then.forEach((nestedStep, nestedIndex) => validateWorkflowStep(nestedStep, `${stepPath}.then[${nestedIndex}]`));
+          }
+          if (typeof step.elseSteps !== 'undefined') {
+            if (!Array.isArray(step.elseSteps)) {
+              issues.push({ path: `${stepPath}.elseSteps`, message: 'must be an array when provided' });
+            } else {
+              step.elseSteps.forEach((nestedStep, nestedIndex) => validateWorkflowStep(nestedStep, `${stepPath}.elseSteps[${nestedIndex}]`));
+            }
+          }
+          break;
         default:
-          issues.push({ path: `${stepPath}.type`, message: "must be one of 'command', 'delay', 'emit', or 'workflow'" });
+          issues.push({ path: `${stepPath}.type`, message: "must be one of 'command', 'delay', 'emit', 'workflow', or 'branch'" });
       }
+    };
+
+    workflow.steps.forEach((step, stepIndex) => {
+      validateWorkflowStep(step, `${path}.steps[${stepIndex}]`);
     });
   }
 
@@ -267,8 +305,41 @@ function validateWorkflow(
       if (typeof workflow.trigger.schedule !== 'undefined') {
         if (!isPlainObject(workflow.trigger.schedule)) {
           issues.push({ path: `${path}.trigger.schedule`, message: 'must be an object' });
-        } else if (typeof workflow.trigger.schedule.everyMs !== 'number' || workflow.trigger.schedule.everyMs <= 0) {
-          issues.push({ path: `${path}.trigger.schedule.everyMs`, message: 'must be a positive number' });
+        } else {
+          if (
+            typeof workflow.trigger.schedule.everyMs === 'undefined'
+            && typeof workflow.trigger.schedule.cron === 'undefined'
+          ) {
+            issues.push({ path: `${path}.trigger.schedule`, message: 'must define everyMs or cron' });
+          }
+
+          if (
+            typeof workflow.trigger.schedule.everyMs !== 'undefined'
+            && (typeof workflow.trigger.schedule.everyMs !== 'number' || workflow.trigger.schedule.everyMs <= 0)
+          ) {
+            issues.push({ path: `${path}.trigger.schedule.everyMs`, message: 'must be a positive number' });
+          }
+
+          if (
+            typeof workflow.trigger.schedule.cron !== 'undefined'
+            && (typeof workflow.trigger.schedule.cron !== 'string' || workflow.trigger.schedule.cron.trim() === '')
+          ) {
+            issues.push({ path: `${path}.trigger.schedule.cron`, message: 'must be a non-empty string' });
+          }
+
+          if (
+            typeof workflow.trigger.schedule.timeZone !== 'undefined'
+            && (typeof workflow.trigger.schedule.timeZone !== 'string' || !isValidTimeZone(workflow.trigger.schedule.timeZone))
+          ) {
+            issues.push({ path: `${path}.trigger.schedule.timeZone`, message: 'must be a valid IANA time zone' });
+          }
+
+          if (
+            typeof workflow.trigger.schedule.concurrency !== 'undefined'
+            && !['allow', 'forbid', 'queue'].includes(String(workflow.trigger.schedule.concurrency))
+          ) {
+            issues.push({ path: `${path}.trigger.schedule.concurrency`, message: "must be 'allow', 'forbid', or 'queue'" });
+          }
         }
       }
 
@@ -413,6 +484,9 @@ export function validateAppConfig(
       config.plugins.forEach((plugin, index) => {
         if (!isPlainObject(plugin) || typeof plugin.name !== 'string' || plugin.name.trim() === '') {
           issues.push({ path: `plugins[${index}].name`, message: 'must be a non-empty string' });
+        }
+        if (isPlainObject(plugin) && typeof plugin.path !== 'undefined' && (typeof plugin.path !== 'string' || plugin.path.trim() === '')) {
+          issues.push({ path: `plugins[${index}].path`, message: 'must be a non-empty string when provided' });
         }
       });
     }

@@ -8,5 +8,7 @@ export * from './events/event-bus-contract';
 export * from './events/event-names';
 export * from './events/event-types';
 export * from './persistence/persistence-types';
+export * from './plugins/plugin-types';
+export * from './runtime/runtime-types';
 export * from './serialization/event-serializer';
 export * from './time/timezone';

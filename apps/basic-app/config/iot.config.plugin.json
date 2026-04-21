@@ -1,0 +1,50 @@
+{
+  "runtime": {
+    "driver": "loopback",
+    "timezone": "America/Santiago"
+  },
+  "plugins": [
+    {
+      "name": "loopback-plugin",
+      "path": "../plugins/loopback-plugin.ts"
+    }
+  ],
+  "devices": [
+    {
+      "id": "plugin-led",
+      "type": "virtual-led",
+      "pin": 13
+    }
+  ],
+  "workflows": [
+    {
+      "id": "plugin_heartbeat",
+      "trigger": {
+        "schedule": {
+          "everyMs": 3000,
+          "runAtStartup": true,
+          "concurrency": "forbid"
+        }
+      },
+      "steps": [
+        {
+          "type": "command",
+          "deviceId": "plugin-led",
+          "command": "toggle"
+        }
+      ]
+    }
+  ],
+  "rest": {
+    "port": 3000,
+    "websocketPath": "/ws"
+  },
+  "persistence": {
+    "directory": "../data",
+    "eventLogFile": "events.plugin.jsonl",
+    "stateFile": "state.plugin.json",
+    "maxEvents": 500,
+    "rotateAfterBytes": 32768,
+    "maxBackups": 5
+  }
+}

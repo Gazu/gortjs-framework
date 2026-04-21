@@ -3,6 +3,8 @@ import type { ConfigValidationIssue } from '../config/config-validation';
 import type { DeviceConfig, DeviceState } from '../devices/device-types';
 import type { EventBusHealth } from '../events/event-types';
 import type { PersistenceConfig, PersistenceHealth } from '../persistence/persistence-types';
+import type { LoadedPluginSummary } from '../plugins/plugin-types';
+import type { RuntimeSummary, WorkflowJobStatus } from '../runtime/runtime-types';
 
 export type IoTAppStatus = 'created' | 'attached' | 'running' | 'stopped' | 'disposed' | 'error';
 export type SupportedDriverName = 'johnny-five' | 'mock';
@@ -56,6 +58,7 @@ export interface IoTRuntimeConfig {
 
 export interface PluginReferenceConfig {
   name: string;
+  path?: string;
   options?: Record<string, unknown>;
 }
 
@@ -82,6 +85,12 @@ export interface IoTAppSnapshot {
   devices: DeviceState[];
   rules: AutomationRule[];
   workflows: WorkflowDefinition[];
+}
+
+export interface IoTAppImportSnapshot {
+  devices?: DeviceConfig[];
+  rules?: AutomationRule[];
+  workflows?: WorkflowDefinition[];
 }
 
 export interface IoTAppHealth {
@@ -113,6 +122,12 @@ export interface IoTAppConfig {
   rest?: RestServerConfig;
   persistence?: PersistenceConfig;
   plugins?: PluginReferenceConfig[];
+}
+
+export interface RuntimeAdminProvider {
+  getPluginCatalog(): LoadedPluginSummary[];
+  getRuntimeSummary(): RuntimeSummary;
+  getJobs(): WorkflowJobStatus[];
 }
 
 export type ConfigValidationIssues = ConfigValidationIssue[];

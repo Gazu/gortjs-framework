@@ -1,7 +1,7 @@
 import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import type { AutomationRule, DeviceConfig, IoTAppStatus, RestAuthConfig } from '@gortjs/contracts';
+import type { AutomationRule, DeviceConfig, IoTAppImportSnapshot, IoTAppStatus, RestAuthConfig, RuntimeAdminProvider, WorkflowDefinition } from '@gortjs/contracts';
 import { EventSerializer, createTimestamp } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import { WebSocketServer } from 'ws';
@@ -23,6 +23,7 @@ export class RestServer {
   constructor(
     private readonly params: {
       app: IoTApp;
+      admin?: RuntimeAdminProvider;
       host?: string;
       port?: number;
       websocketPath?: string;
@@ -76,6 +77,18 @@ export class RestServer {
 
     this.expressApp.get('/snapshot', this.requireAuth('snapshot:read'), (_req: Request, res: Response) => {
       res.json(this.params.app.getSnapshot());
+    });
+
+    this.expressApp.post('/snapshot/import', this.requireAuth('snapshot:write'), async (
+      req: Request<unknown, unknown, IoTAppImportSnapshot>,
+      res: Response,
+    ) => {
+      try {
+        await this.params.app.applySnapshot(req.body ?? {});
+        res.json({ ok: true, snapshot: this.params.app.getSnapshot() });
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
     });
 
     this.expressApp.get('/health', this.requireAuth('health:read'), async (_req: Request, res: Response) => {
@@ -173,6 +186,26 @@ export class RestServer {
       res.json({ workflows: this.params.app.getWorkflows() });
     });
 
+    this.expressApp.get('/jobs', this.requireAuth('jobs:read'), (_req: Request, res: Response) => {
+      res.json({ jobs: this.params.app.getWorkflowJobs() });
+    });
+
+    this.expressApp.get('/plugins', this.requireAuth('plugins:read'), (_req: Request, res: Response) => {
+      res.json({
+        plugins: this.params.admin?.getPluginCatalog() ?? [],
+      });
+    });
+
+    this.expressApp.get('/runtime', this.requireAuth('runtime:read'), (_req: Request, res: Response) => {
+      res.json(this.params.admin?.getRuntimeSummary() ?? {
+        config: {},
+        plugins: [],
+        availableDrivers: [],
+        availableDeviceTypes: [],
+        jobs: this.params.app.getWorkflowJobs(),
+      });
+    });
+
     this.expressApp.get('/persisted-state', this.requireAuth('persisted-state:read'), (_req: Request, res: Response) => {
       res.json({ devices: this.params.app.getPersistedDeviceStates() });
     });
@@ -257,6 +290,43 @@ export class RestServer {
         }
       },
     );
+
+    this.expressApp.post(
+      '/workflows',
+      this.requireAuth('workflows:write'),
+      (
+        req: Request<unknown, unknown, WorkflowDefinition>,
+        res: Response,
+      ) => {
+        try {
+          this.params.app.registerWorkflow(req.body);
+          res.status(201).json({ ok: true, workflows: this.params.app.getWorkflows() });
+        } catch (error) {
+          res.status(400).json({
+            ok: false,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        }
+      },
+    );
+
+    this.expressApp.delete('/workflows/:id', this.requireAuth('workflows:write'), (req: Request<{ id: string }>, res: Response) => {
+      try {
+        this.params.app.unregisterWorkflow(req.params.id);
+        res.json({ ok: true, workflows: this.params.app.getWorkflows() });
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
+
+    this.expressApp.post('/workflows/:id/run', this.requireAuth('workflows:execute'), async (req: Request<{ id: string }>, res: Response) => {
+      try {
+        await this.params.app.executeWorkflow(req.params.id, req.body as Record<string, unknown> | undefined);
+        res.json({ ok: true });
+      } catch (error) {
+        res.status(400).json({ ok: false, error: error instanceof Error ? error.message : 'Unknown error' });
+      }
+    });
 
     this.expressApp.delete('/rules/:id', this.requireAuth('rules:write'), (req: Request<{ id: string }>, res: Response) => {
       try {
