@@ -1,12 +1,12 @@
 {
   "name": "@gortjs/events",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
   "scripts": { "build": "tsc -b" },
   "dependencies": {
-    "@gortjs/contracts": "0.6.0",
+    "@gortjs/contracts": "0.7.0",
     "redis": "^5.8.2",
     "ws": "^8.18.3"
   },

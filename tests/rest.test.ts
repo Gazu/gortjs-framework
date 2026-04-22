@@ -77,6 +77,30 @@ async function connectAndWaitForEvent(
   };
 }
 
+async function expectNoEvent(socket: WebSocket, eventName: string, timeoutMs = 250): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const onMessage = (raw: WebSocket.RawData) => {
+      const parsed = JSON.parse(raw.toString()) as Record<string, unknown>;
+      if (parsed.eventName === eventName) {
+        cleanup();
+        reject(new Error(`Unexpected event '${eventName}' received`));
+      }
+    };
+
+    const cleanup = () => {
+      clearTimeout(timeout);
+      socket.off('message', onMessage);
+    };
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, timeoutMs);
+
+    socket.on('message', onMessage);
+  });
+}
+
 function base64UrlEncode(value: string): string {
   return Buffer.from(value)
     .toString('base64')
@@ -535,5 +559,133 @@ test('admin endpoints expose plugins, jobs, runtime summary, and snapshot import
   assert.equal(importResponse.status, 200);
   assert.equal((importResponse.body as { snapshot: { devices: Array<{ id: string }> } }).snapshot.devices[0]?.id, 'relay1');
 
+  await runtime.dispose();
+});
+
+test('control plane tracks remote nodes and routes commands to registered runtimes', async () => {
+  const controlRuntime = await AppRuntime.fromConfig({
+    runtime: {
+      driver: 'mock',
+      cluster: {
+        role: 'control-plane',
+        nodeId: 'control-plane',
+        sharedToken: 'cluster-secret',
+      },
+    },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+    },
+  });
+  await controlRuntime.start();
+
+  const controlUrl = controlRuntime.getRestServer()!.getUrl()!;
+  const edgeRuntime = await AppRuntime.fromConfig({
+    runtime: {
+      driver: 'mock',
+      cluster: {
+        role: 'node',
+        nodeId: 'edge-1',
+        controlPlaneUrl: controlUrl,
+        sharedToken: 'cluster-secret',
+      },
+    },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+    },
+    devices: [
+      { id: 'edge-led', type: 'led', pin: 13 },
+    ],
+  });
+  await edgeRuntime.start();
+  await sleep(250);
+
+  const nodesResponse = await requestJson(`${controlUrl}/cluster/nodes`);
+  assert.equal(nodesResponse.status, 200);
+  const nodeIds = ((nodesResponse.body as { nodes: Array<{ nodeId: string }> }).nodes).map((node) => node.nodeId);
+  assert.ok(nodeIds.includes('edge-1'));
+
+  const routedCommand = await requestJson(`${controlUrl}/devices/edge-led/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'on' }),
+  });
+  assert.equal(routedCommand.status, 200);
+  assert.equal((routedCommand.body as { routedTo: string }).routedTo, 'edge-1');
+
+  const remoteState = edgeRuntime.getApp().getDevice('edge-led').getState();
+  assert.equal(remoteState.state?.on, true);
+
+  await edgeRuntime.dispose();
+  await controlRuntime.dispose();
+});
+
+test('WebSocket subscriptions support replay and event filtering for distributed streaming clients', async () => {
+  const runtime = await AppRuntime.fromConfig({
+    runtime: { driver: 'mock' },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+      websocket: {
+        path: '/ws',
+        replayLimit: 5,
+        maxBufferedBytes: 64 * 1024,
+        slowClientPolicy: 'terminate',
+      },
+    },
+    persistence: {
+      adapter: 'memory',
+      maxEvents: 20,
+    },
+    devices: [
+      { id: 'led1', type: 'led', pin: 13 },
+      { id: 'relay1', type: 'relay', pin: 7 },
+    ],
+  });
+  await runtime.start();
+  const rest = runtime.getRestServer()!;
+
+  await requestJson(`${rest.getUrl()}/devices/led1/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'on' }),
+  });
+  await requestJson(`${rest.getUrl()}/devices/led1/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'off' }),
+  });
+
+  const { socket, event: replayEvent } = await connectAndWaitForEvent(
+    `${rest.getWebSocketUrl()}?eventName=device:led1:command:executed&deviceId=led1&replay=1`,
+    'device:led1:command:executed',
+  );
+  assert.equal(replayEvent.eventName, 'device:led1:command:executed');
+  assert.equal(
+    ((replayEvent.payload as { payload: { state: { state: { on: boolean } } } }).payload.state.state.on),
+    false,
+  );
+
+  await requestJson(`${rest.getUrl()}/devices/relay1/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'open' }),
+  });
+  await expectNoEvent(socket, 'device:relay1:command:executed');
+
+  const ledEventPromise = waitForEvent(socket, 'device:led1:command:executed');
+  await requestJson(`${rest.getUrl()}/devices/led1/commands`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ command: 'on' }),
+  });
+  const ledEvent = await ledEventPromise;
+  assert.equal(
+    ((ledEvent.payload as { payload: { state: { state: { on: boolean } } } }).payload.state.state.on),
+    true,
+  );
+
+  socket.close();
   await runtime.dispose();
 });

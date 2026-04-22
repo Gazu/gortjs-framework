@@ -189,6 +189,31 @@ function validateConditionSet(
   }
 }
 
+function validateRestAuthConfig(auth: Record<string, unknown>, issues: ConfigValidationIssue[]): void {
+  if (!['static', 'jwt'].includes(String(auth.mode))) {
+    issues.push({ path: 'rest.auth.mode', message: "must be 'static' or 'jwt'" });
+  }
+
+  if (auth.mode === 'static' && typeof auth.token !== 'string' && typeof auth.tokenEnv !== 'string') {
+    issues.push({ path: 'rest.auth.token', message: 'token or tokenEnv is required for static auth' });
+  }
+
+  if (
+    auth.mode === 'jwt'
+    && typeof auth.publicKey !== 'string'
+    && typeof auth.publicKeyEnv !== 'string'
+    && typeof auth.publicKeyFile !== 'string'
+    && typeof auth.publicKeyFileEnv !== 'string'
+    && !Array.isArray(auth.publicKeyFiles)
+  ) {
+    issues.push({ path: 'rest.auth.publicKey', message: 'public key material or file reference is required for jwt auth' });
+  }
+
+  if (typeof auth.scopes !== 'undefined' && !isPlainObject(auth.scopes)) {
+    issues.push({ path: 'rest.auth.scopes', message: 'must be an object when provided' });
+  }
+}
+
 function validateWorkflow(
   workflow: unknown,
   index: number,
@@ -407,32 +432,40 @@ export function validateAppConfig(
         issues.push({ path: 'rest.websocketPath', message: 'must be a string' });
       }
 
+      if (typeof config.rest.websocket !== 'undefined') {
+        if (!isPlainObject(config.rest.websocket)) {
+          issues.push({ path: 'rest.websocket', message: 'must be an object when provided' });
+        } else {
+          const replayLimit = config.rest.websocket.replayLimit;
+          if (
+            typeof replayLimit !== 'undefined'
+            && (typeof replayLimit !== 'number' || !Number.isInteger(replayLimit) || replayLimit < 0)
+          ) {
+            issues.push({ path: 'rest.websocket.replayLimit', message: 'must be a non-negative integer' });
+          }
+
+          const maxBufferedBytes = config.rest.websocket.maxBufferedBytes;
+          if (
+            typeof maxBufferedBytes !== 'undefined'
+            && (typeof maxBufferedBytes !== 'number' || !Number.isFinite(maxBufferedBytes) || maxBufferedBytes <= 0)
+          ) {
+            issues.push({ path: 'rest.websocket.maxBufferedBytes', message: 'must be a positive number' });
+          }
+
+          if (
+            typeof config.rest.websocket.slowClientPolicy !== 'undefined'
+            && !['drop', 'terminate'].includes(String(config.rest.websocket.slowClientPolicy))
+          ) {
+            issues.push({ path: 'rest.websocket.slowClientPolicy', message: "must be 'drop' or 'terminate'" });
+          }
+        }
+      }
+
       if (typeof config.rest.auth !== 'undefined') {
         if (!isPlainObject(config.rest.auth)) {
           issues.push({ path: 'rest.auth', message: 'must be an object when provided' });
         } else {
-          if (!['static', 'jwt'].includes(String(config.rest.auth.mode))) {
-            issues.push({ path: 'rest.auth.mode', message: "must be 'static' or 'jwt'" });
-          }
-
-          if (config.rest.auth.mode === 'static' && typeof config.rest.auth.token !== 'string') {
-            issues.push({ path: 'rest.auth.token', message: 'is required for static auth' });
-          }
-
-          if (
-            config.rest.auth.mode === 'jwt'
-            && typeof config.rest.auth.publicKey !== 'string'
-            && typeof config.rest.auth.publicKeyFile !== 'string'
-          ) {
-            issues.push({ path: 'rest.auth.publicKey', message: 'publicKey or publicKeyFile is required for jwt auth' });
-          }
-
-          if (
-            typeof config.rest.auth.scopes !== 'undefined'
-            && !isPlainObject(config.rest.auth.scopes)
-          ) {
-            issues.push({ path: 'rest.auth.scopes', message: 'must be an object when provided' });
-          }
+          validateRestAuthConfig(config.rest.auth, issues);
         }
       }
     }
@@ -470,6 +503,78 @@ export function validateAppConfig(
           issues.push({ path: 'runtime.timezone', message: `invalid IANA time zone '${config.runtime.timezone}'` });
         }
       }
+
+      if (typeof config.runtime.events !== 'undefined') {
+        if (!isPlainObject(config.runtime.events)) {
+          issues.push({ path: 'runtime.events', message: 'must be an object when provided' });
+        } else if (typeof config.runtime.events.adapters !== 'undefined') {
+          if (!Array.isArray(config.runtime.events.adapters)) {
+            issues.push({ path: 'runtime.events.adapters', message: 'must be an array when provided' });
+          } else {
+            config.runtime.events.adapters.forEach((adapter, index) => {
+              if (!isPlainObject(adapter)) {
+                issues.push({ path: `runtime.events.adapters[${index}]`, message: 'must be an object' });
+                return;
+              }
+
+              if (!['redis', 'mqtt', 'webhook'].includes(String(adapter.type))) {
+                issues.push({ path: `runtime.events.adapters[${index}].type`, message: "must be 'redis', 'mqtt', or 'webhook'" });
+              }
+
+              if (
+                typeof adapter.direction !== 'undefined'
+                && !['inbound', 'outbound', 'both'].includes(String(adapter.direction))
+              ) {
+                issues.push({ path: `runtime.events.adapters[${index}].direction`, message: "must be 'inbound', 'outbound', or 'both'" });
+              }
+            });
+          }
+        }
+      }
+
+      if (typeof config.runtime.cluster !== 'undefined') {
+        if (!isPlainObject(config.runtime.cluster)) {
+          issues.push({ path: 'runtime.cluster', message: 'must be an object when provided' });
+        } else {
+          if (
+            typeof config.runtime.cluster.role !== 'undefined'
+            && !['standalone', 'node', 'control-plane'].includes(String(config.runtime.cluster.role))
+          ) {
+            issues.push({ path: 'runtime.cluster.role', message: "must be 'standalone', 'node', or 'control-plane'" });
+          }
+
+          if (
+            typeof config.runtime.cluster.heartbeatIntervalMs !== 'undefined'
+            && (
+              typeof config.runtime.cluster.heartbeatIntervalMs !== 'number'
+              || config.runtime.cluster.heartbeatIntervalMs <= 0
+            )
+          ) {
+            issues.push({ path: 'runtime.cluster.heartbeatIntervalMs', message: 'must be a positive number' });
+          }
+
+          if (typeof config.runtime.cluster.remotes !== 'undefined') {
+            if (!Array.isArray(config.runtime.cluster.remotes)) {
+              issues.push({ path: 'runtime.cluster.remotes', message: 'must be an array when provided' });
+            } else {
+              config.runtime.cluster.remotes.forEach((remote, index) => {
+                if (!isPlainObject(remote)) {
+                  issues.push({ path: `runtime.cluster.remotes[${index}]`, message: 'must be an object' });
+                  return;
+                }
+
+                if (typeof remote.nodeId !== 'string' || remote.nodeId.trim() === '') {
+                  issues.push({ path: `runtime.cluster.remotes[${index}].nodeId`, message: 'must be a non-empty string' });
+                }
+
+                if (typeof remote.url !== 'string' || remote.url.trim() === '') {
+                  issues.push({ path: `runtime.cluster.remotes[${index}].url`, message: 'must be a non-empty string' });
+                }
+              });
+            }
+          }
+        }
+      }
     }
   }
 
@@ -496,8 +601,19 @@ export function validateAppConfig(
     if (!isPlainObject(config.persistence)) {
       issues.push({ path: 'persistence', message: 'must be an object when provided' });
     } else {
-      if (typeof config.persistence.directory !== 'string' || config.persistence.directory.trim() === '') {
+      if (
+        (config.persistence.adapter ?? 'file') === 'file'
+        && (typeof config.persistence.directory !== 'string' || config.persistence.directory.trim() === '')
+      ) {
         issues.push({ path: 'persistence.directory', message: 'must be a non-empty string' });
+      }
+
+      if (
+        config.persistence.adapter === 'redis'
+        && (typeof (config.persistence as Record<string, unknown>).url !== 'string'
+          || String((config.persistence as Record<string, unknown>).url).trim() === '')
+      ) {
+        issues.push({ path: 'persistence.url', message: 'must be a non-empty string for redis persistence' });
       }
 
       if (

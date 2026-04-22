@@ -48,7 +48,7 @@ import { johnnyFiveComponentConstructors } from './drivers/johnny-five/johnny-fi
 import { MockDriver } from './drivers/mock/mock-driver';
 import { HealthService } from './health/health-service';
 import { AppMetricsService } from './metrics/app-metrics';
-import { FilePersistence } from './persistence/file-persistence';
+import { createPersistenceProvider } from './persistence/persistence-factory';
 
 const DEFAULT_DEVICE_TYPES: Record<string, DeviceConstructor> = {
   ...johnnyFiveComponentConstructors,
@@ -74,6 +74,7 @@ type IoTAppOptions = {
   rules?: AutomationRule[];
   workflows?: WorkflowDefinition[];
   timeZone?: string;
+  nodeId?: string;
 };
 
 export class IoTApp {
@@ -90,10 +91,12 @@ export class IoTApp {
   private readonly metrics: AppMetricsService;
   private persistence?: PersistenceProvider;
   private readonly timeZone?: string;
+  private readonly nodeId?: string;
 
   constructor(
     private readonly options: IoTAppOptions = {}) {
     this.timeZone = options.timeZone;
+    this.nodeId = options.nodeId;
     configureTimeZone(this.timeZone);
     this.driver = options.driverInstance ?? this.createDriver(options);
     this.eventBus = options.eventBus ?? new EventBus();
@@ -159,6 +162,7 @@ export class IoTApp {
       persistence: config.persistence,
       workflows: config.workflows,
       timeZone: config.runtime?.timezone,
+      nodeId: config.runtime?.cluster?.nodeId,
     });
   }
 
@@ -236,6 +240,15 @@ export class IoTApp {
     return this.registry.get(deviceId);
   }
 
+  hasDevice(deviceId: string): boolean {
+    try {
+      this.getDevice(deviceId);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   getDevices() {
     return this.registry.serializeAll();
   }
@@ -306,6 +319,10 @@ export class IoTApp {
     return this.workflowEngine.execute(workflowId, input);
   }
 
+  ingestEvent(eventName: string, payload: unknown = {}): void {
+    this.eventBus.emit(eventName, payload);
+  }
+
   async start(): Promise<void> {
     if (this.status === 'disposed') {
       throw new Error('Cannot start a disposed IoTApp');
@@ -327,6 +344,7 @@ export class IoTApp {
     this.eventBus.emit(appEventNames.ready, {
       devices: this.getDevices(),
       deviceTypes: this.getDeviceTypes(),
+      nodeId: this.nodeId,
     });
   }
 
@@ -437,10 +455,7 @@ export class IoTApp {
       return;
     }
 
-    this.persistence = new FilePersistence({
-      eventBus: this.eventBus,
-      config,
-    });
+    this.persistence = createPersistenceProvider(this.eventBus, config);
   }
 
   private createDriver(options: IoTAppOptions): DriverContract {

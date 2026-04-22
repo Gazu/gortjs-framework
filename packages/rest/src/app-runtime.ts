@@ -6,10 +6,13 @@ import type {
   IoTAppConfig,
   RuntimeAdminProvider,
   RuntimeProfileConfig,
+  RuntimeNodeSummary,
 } from '@gortjs/contracts';
 import { IoTApp, PluginRegistry, JohnnyFiveDriver, MockDriver } from '@gortjs/core';
 import type { GortPlugin } from '@gortjs/core';
 import { RestServer } from './rest-server';
+import { ClusterManager } from './cluster-manager';
+import { RuntimeEventBridge } from './runtime-event-bridge';
 
 function mergeProfile(base: IoTAppConfig, profile?: RuntimeProfileConfig): IoTAppConfig {
   if (!profile) {
@@ -44,12 +47,15 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
     return resolve(configDir, target);
   };
 
-  if (config.persistence?.directory) {
+  if (config.persistence?.adapter !== 'memory' && config.persistence && 'directory' in config.persistence && config.persistence.directory) {
     config.persistence.directory = resolveMaybe(config.persistence.directory)!;
   }
 
   if (config.rest?.auth?.publicKeyFile) {
     config.rest.auth.publicKeyFile = resolveMaybe(config.rest.auth.publicKeyFile)!;
+  }
+  if (config.rest?.auth?.publicKeyFiles) {
+    config.rest.auth.publicKeyFiles = config.rest.auth.publicKeyFiles.map((file) => resolveMaybe(file)!);
   }
 
   for (const pluginRef of config.plugins ?? []) {
@@ -59,12 +65,15 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
   }
 
   for (const profile of Object.values(config.profiles ?? {})) {
-    if (profile.persistence?.directory) {
+    if (profile.persistence?.adapter !== 'memory' && profile.persistence && 'directory' in profile.persistence && profile.persistence.directory) {
       profile.persistence.directory = resolveMaybe(profile.persistence.directory)!;
     }
 
     if (profile.rest?.auth?.publicKeyFile) {
       profile.rest.auth.publicKeyFile = resolveMaybe(profile.rest.auth.publicKeyFile)!;
+    }
+    if (profile.rest?.auth?.publicKeyFiles) {
+      profile.rest.auth.publicKeyFiles = profile.rest.auth.publicKeyFiles.map((file) => resolveMaybe(file)!);
     }
 
     for (const pluginRef of profile.plugins ?? []) {
@@ -72,6 +81,38 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
         pluginRef.path = resolveMaybe(pluginRef.path)!;
       }
     }
+  }
+
+  return config;
+}
+
+function resolveSecretValue(value?: string, envName?: string): string | undefined {
+  if (value) {
+    return value;
+  }
+
+  if (envName) {
+    return process.env[envName];
+  }
+
+  return undefined;
+}
+
+function resolveRuntimeSecrets(config: IoTAppConfig): IoTAppConfig {
+  const auth = config.rest?.auth;
+  if (auth) {
+    auth.token = resolveSecretValue(auth.token, auth.tokenEnv);
+    auth.publicKey = resolveSecretValue(auth.publicKey, auth.publicKeyEnv);
+    auth.publicKeyFile = resolveSecretValue(auth.publicKeyFile, auth.publicKeyFileEnv);
+  }
+
+  const cluster = config.runtime?.cluster;
+  if (cluster) {
+    cluster.sharedToken = resolveSecretValue(cluster.sharedToken, cluster.sharedTokenEnv);
+  }
+
+  for (const adapter of config.runtime?.events?.adapters ?? []) {
+    adapter.token = resolveSecretValue(adapter.token, adapter.tokenEnv);
   }
 
   return config;
@@ -103,11 +144,13 @@ export class AppRuntime {
       config: IoTAppConfig;
       restServer?: RestServer;
       admin: RuntimeAdminProvider;
+      clusterManager?: ClusterManager;
+      eventBridge?: RuntimeEventBridge;
     },
   ) {}
 
   static async fromConfig(config: IoTAppConfig, options: AppRuntimeOptions = {}): Promise<AppRuntime> {
-    const effectiveConfig = this.resolveConfig(config);
+    const effectiveConfig = resolveRuntimeSecrets(this.resolveConfig(config));
     const plugins = new PluginRegistry({
       plugins: options.plugins,
       deviceTypes: options.deviceTypes,
@@ -132,10 +175,24 @@ export class AppRuntime {
       deviceTypes: plugins.getDeviceTypes(),
       persistence: effectiveConfig.persistence,
       timeZone: effectiveConfig.runtime?.timezone,
+      nodeId: effectiveConfig.runtime?.cluster?.nodeId,
     });
     await app.configure(effectiveConfig);
 
-    const restServer = effectiveConfig.rest?.enabled === false
+    let restServer: RestServer | undefined;
+    const clusterManager = new ClusterManager({
+      app,
+      config: effectiveConfig,
+      getLocalUrl: () => restServer?.getUrl(),
+    });
+    const eventBridge = new RuntimeEventBridge({
+      app,
+      config: effectiveConfig,
+      nodeId: clusterManager.getNodeId(),
+      ingestEvent: (eventName, payload) => app.ingestEvent(eventName, payload),
+    });
+
+    restServer = effectiveConfig.rest?.enabled === false
       ? undefined
       : new RestServer({
           app,
@@ -148,12 +205,31 @@ export class AppRuntime {
               availableDrivers: plugins.listDrivers(),
               availableDeviceTypes: plugins.listDeviceTypes(),
               jobs: app.getWorkflowJobs(),
+              cluster: clusterManager.getClusterState(),
+              eventAdapters: eventBridge.getStatuses(),
+              storage: {
+                adapter: effectiveConfig.persistence?.adapter ?? 'file',
+              },
             }),
+            getClusterState: () => clusterManager.getClusterState(),
+            listClusterNodes: () => clusterManager.listNodes(),
+            registerClusterNode: (node) => {
+              clusterManager.registerNode(node as RuntimeNodeSummary & { devices?: never[] });
+            },
+            recordClusterEvent: ({ nodeId, eventName, timestamp }) => {
+              clusterManager.recordRemoteEvent({ nodeId, eventName, timestamp });
+            },
+            routeCommand: (deviceId, command, payload) => clusterManager.routeCommand(deviceId, command, payload),
+            ingestEvent: (eventName, payload) => {
+              app.ingestEvent(eventName, payload);
+            },
           },
           host: effectiveConfig.rest?.host,
           port: effectiveConfig.rest?.port,
-          websocketPath: effectiveConfig.rest?.websocketPath,
+          websocketPath: effectiveConfig.rest?.websocket?.path ?? effectiveConfig.rest?.websocketPath,
+          websocket: effectiveConfig.rest?.websocket,
           auth: effectiveConfig.rest?.auth,
+          cluster: effectiveConfig.runtime?.cluster,
         });
 
     return new AppRuntime({
@@ -169,8 +245,27 @@ export class AppRuntime {
           availableDrivers: plugins.listDrivers(),
           availableDeviceTypes: plugins.listDeviceTypes(),
           jobs: app.getWorkflowJobs(),
+          cluster: clusterManager.getClusterState(),
+          eventAdapters: eventBridge.getStatuses(),
+          storage: {
+            adapter: effectiveConfig.persistence?.adapter ?? 'file',
+          },
         }),
+        getClusterState: () => clusterManager.getClusterState(),
+        listClusterNodes: () => clusterManager.listNodes(),
+        registerClusterNode: (node) => {
+          clusterManager.registerNode(node as RuntimeNodeSummary & { devices?: never[] });
+        },
+        recordClusterEvent: ({ nodeId, eventName, timestamp }) => {
+          clusterManager.recordRemoteEvent({ nodeId, eventName, timestamp });
+        },
+        routeCommand: (deviceId, command, payload) => clusterManager.routeCommand(deviceId, command, payload),
+        ingestEvent: (eventName, payload) => {
+          app.ingestEvent(eventName, payload);
+        },
       },
+      clusterManager,
+      eventBridge,
     });
   }
 
@@ -198,11 +293,15 @@ export class AppRuntime {
 
   async start(): Promise<void> {
     await this.params.app.start();
+    await this.params.eventBridge?.start();
     await this.params.restServer?.start();
+    await this.params.clusterManager?.start();
   }
 
   async stop(): Promise<void> {
+    await this.params.clusterManager?.stop();
     await this.params.restServer?.stop();
+    await this.params.eventBridge?.stop();
     await this.params.app.stop();
   }
 

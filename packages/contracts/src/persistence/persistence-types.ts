@@ -1,14 +1,38 @@
 import type { DeviceState } from '../devices/device-types';
 import type { EventHistoryEntry, EventHistoryPage, EventHistoryQuery } from '../events/event-types';
 
-export interface PersistenceConfig {
+export type PersistenceAdapterName = 'file' | 'memory' | 'redis';
+
+export interface BasePersistenceConfig {
+  adapter?: PersistenceAdapterName;
+  maxEvents?: number;
+}
+
+export interface FilePersistenceConfig extends BasePersistenceConfig {
+  adapter?: 'file';
   directory: string;
   eventLogFile?: string;
   stateFile?: string;
-  maxEvents?: number;
   rotateAfterBytes?: number;
   maxBackups?: number;
 }
+
+export interface MemoryPersistenceConfig extends BasePersistenceConfig {
+  adapter: 'memory';
+}
+
+export interface RedisPersistenceConfig extends BasePersistenceConfig {
+  adapter: 'redis';
+  url: string;
+  keyPrefix?: string;
+  eventHistoryKey?: string;
+  stateKey?: string;
+}
+
+export type PersistenceConfig =
+  | FilePersistenceConfig
+  | MemoryPersistenceConfig
+  | RedisPersistenceConfig;
 
 export interface BackupFileInfo {
   path: string;
@@ -18,6 +42,7 @@ export interface BackupFileInfo {
 
 export interface PersistenceHealth {
   enabled: boolean;
+  adapter?: PersistenceAdapterName;
   initialized: boolean;
   directory?: string;
   eventLogFile?: string;

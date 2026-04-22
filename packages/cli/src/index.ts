@@ -9,6 +9,7 @@ function printUsage(): void {
     '  gortjs start <configPath>',
     '  gortjs inspect <url> [--token=TOKEN] [--path=/status]',
     '  gortjs plugins <configPath>',
+    '  gortjs cluster <url> [--token=TOKEN]',
   ].join('\n'));
 }
 
@@ -79,6 +80,18 @@ async function main(): Promise<void> {
       const runtime = await AppRuntime.fromFile(configPath);
       console.log(JSON.stringify(runtime.getAdmin().getPluginCatalog(), null, 2));
       await runtime.dispose();
+      return;
+    }
+    case 'cluster': {
+      if (!target) {
+        throw new Error('cluster requires a base url');
+      }
+      const token = getOption('token', rest);
+      const response = await fetch(`${target.replace(/\/$/, '')}/cluster`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const body = await response.json();
+      console.log(JSON.stringify({ status: response.status, body }, null, 2));
       return;
     }
     default:
