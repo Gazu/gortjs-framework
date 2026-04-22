@@ -1,7 +1,10 @@
 import type { DeviceConstructor, PluginManifest, SupportedDriverName } from '@gortjs/contracts';
 import type { DriverContract, LoadedPluginSummary } from '@gortjs/contracts';
+import {
+  GORTJS_SUPPORTED_PLUGIN_API_VERSIONS,
+} from '@gortjs/contracts';
 import type { DriverFactory, GortPlugin, PluginApi, RegisteredPluginState } from './plugin-types';
-import { normalizePluginCapabilities } from './plugin-types';
+import { getPluginCompatibility, normalizePluginCapabilities } from './plugin-types';
 
 export class PluginRegistry implements PluginApi {
   private readonly plugins = new Map<string, RegisteredPluginState>();
@@ -63,6 +66,7 @@ export class PluginRegistry implements PluginApi {
       ...plugin.manifest,
       manifest: plugin.manifest,
       capabilities: normalizePluginCapabilities(plugin.manifest.capabilities),
+      compatibility: getPluginCompatibility(plugin.manifest.apiVersion),
       source,
       modulePath,
       applied: false,
@@ -78,6 +82,7 @@ export class PluginRegistry implements PluginApi {
       description: plugin.description,
       keywords: plugin.keywords,
       capabilities: plugin.capabilities,
+      compatibility: plugin.compatibility,
       source: plugin.source,
       modulePath: plugin.modulePath,
       applied: plugin.applied,
@@ -114,8 +119,10 @@ export class PluginRegistry implements PluginApi {
       throw new Error(`Plugin '${manifest.name}' requires a manifest.version`);
     }
 
-    if (manifest.apiVersion !== '0.6') {
-      throw new Error(`Plugin '${manifest.name}' must declare apiVersion '0.6'`);
+    if (!GORTJS_SUPPORTED_PLUGIN_API_VERSIONS.includes(manifest.apiVersion)) {
+      throw new Error(
+        `Plugin '${manifest.name}' declares unsupported apiVersion '${manifest.apiVersion}'. Supported versions: ${GORTJS_SUPPORTED_PLUGIN_API_VERSIONS.join(', ')}`,
+      );
     }
   }
 }

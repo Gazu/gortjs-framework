@@ -2,7 +2,7 @@
 
 `@gortjs/rest` exposes an `IoTApp` instance over HTTP and WebSocket for control, observability, and live monitoring.
 
-Documented for release `0.7.0`.
+Documented for release `0.8.0`.
 
 ## Purpose
 
@@ -15,6 +15,7 @@ Documented for release `0.7.0`.
 ## Main endpoints
 
 - `GET /status`
+- `GET /inspector`
 - `GET /snapshot`
 - `GET /health`
 - `GET /health/deep`
@@ -64,11 +65,11 @@ const runtime = await AppRuntime.fromConfig({
 await runtime.start();
 ```
 
-## Why it matters in 0.7.0
+## Why it matters in 0.8.0
 
-- it can act as the REST edge for a connected multi-node topology
-- it exposes cluster state and remote command routing through the same operational surface
-- it upgrades WebSocket delivery with replay, filtering, and slow-client protection
+- it keeps the distributed runtime base from `0.7.0`
+- it adds an adoption-focused browser inspector for devices, workflows, plugins, metrics, and cluster state
+- it exposes explicit version compatibility data that the CLI and dashboard can surface
 
 ## curl example
 

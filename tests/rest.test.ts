@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
 import WebSocket from 'ws';
+import { GORTJS_FRAMEWORK_VERSION, GORTJS_PLUGIN_API_VERSION } from '@gortjs/contracts';
 import type { IoTAppConfig } from '@gortjs/contracts';
 import type { GortPlugin } from '@gortjs/core';
 import { AppRuntime } from '@gortjs/rest';
@@ -537,6 +538,12 @@ test('admin endpoints expose plugins, jobs, runtime summary, and snapshot import
   const pluginsResponse = await requestJson(`${rest.getUrl()}/plugins`);
   assert.equal(pluginsResponse.status, 200);
   assert.equal((pluginsResponse.body as { plugins: Array<{ name: string }> }).plugins[0]?.name, 'admin-plugin');
+  assert.equal(
+    (pluginsResponse.body as {
+      plugins: Array<{ compatibility?: { supported?: boolean } }>;
+    }).plugins[0]?.compatibility?.supported,
+    true,
+  );
 
   const jobsResponse = await requestJson(`${rest.getUrl()}/jobs`);
   assert.equal(jobsResponse.status, 200);
@@ -545,6 +552,20 @@ test('admin endpoints expose plugins, jobs, runtime summary, and snapshot import
   const runtimeResponse = await requestJson(`${rest.getUrl()}/runtime`);
   assert.equal(runtimeResponse.status, 200);
   assert.ok(((runtimeResponse.body as { availableDrivers: string[] }).availableDrivers).includes('mock'));
+  assert.equal(
+    (runtimeResponse.body as { versions?: { framework?: string } }).versions?.framework,
+    GORTJS_FRAMEWORK_VERSION,
+  );
+  assert.equal(
+    (runtimeResponse.body as { versions?: { pluginApiVersion?: string } }).versions?.pluginApiVersion,
+    GORTJS_PLUGIN_API_VERSION,
+  );
+
+  const inspectorResponse = await fetch(`${rest.getUrl()}/inspector`);
+  assert.equal(inspectorResponse.status, 200);
+  const inspectorHtml = await inspectorResponse.text();
+  assert.match(inspectorHtml, /GortJS Inspector/);
+  assert.match(inspectorHtml, /Developer dashboard for runtime adoption/);
 
   await requestJson(`${rest.getUrl()}/lifecycle/stop`, { method: 'POST' });
   const importResponse = await requestJson(`${rest.getUrl()}/snapshot/import`, {
