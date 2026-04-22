@@ -1,6 +1,7 @@
 import type { IoTAppConfig } from '../app/iot-app-types';
 import type { RuntimeEventAdapterStatus } from '../events/event-types';
 import type { LoadedPluginSummary } from '../plugins/plugin-types';
+import type { PluginApiVersion } from '../plugins/plugin-types';
 
 export type WorkflowJobKind = 'interval' | 'cron';
 export type WorkflowConcurrencyPolicy = 'allow' | 'forbid' | 'queue';
@@ -59,6 +60,12 @@ export interface RuntimeSummary {
   availableDrivers: string[];
   availableDeviceTypes: string[];
   jobs: WorkflowJobStatus[];
+  versions?: {
+    framework: string;
+    pluginApiVersion: PluginApiVersion;
+    supportedPluginApiVersions: PluginApiVersion[];
+    packages: Record<string, string>;
+  };
   cluster?: ClusterStateSummary;
   eventAdapters?: RuntimeEventAdapterStatus[];
   storage?: {

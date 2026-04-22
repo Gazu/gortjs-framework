@@ -2,7 +2,7 @@
 
 `@gortjs/events` provides `EventBusContract` implementations for local and distributed event flows.
 
-Documented for release `0.7.0`.
+Documented for release `0.8.0`.
 
 ## Purpose
 
@@ -18,11 +18,11 @@ Documented for release `0.7.0`.
 - `RedisEventBus`: pub/sub transport powered by `redis`
 - `NoopEventBus`: no-op implementation for tests or dependency wiring
 
-## Why it matters in 0.7.0
+## Why it matters in 0.8.0
 
 - it stays compatible with local apps while enabling distributed event topologies
 - it backs Redis-based interoperability and replayable event streaming patterns
-- it provides the common event language used by control-plane and webhook integrations
+- it provides the common event language used by control-plane, webhook integrations, and the new runtime inspector
 
 ## Installation
 

@@ -6,6 +6,7 @@ import { EventSerializer, createTimestamp } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import WebSocket, { WebSocketServer } from 'ws';
 import { AuthService } from './auth-service';
+import { renderInspectorPage } from './inspector-page';
 
 type WebSocketClientFilter = {
   eventName?: string;
@@ -105,6 +106,10 @@ export class RestServer {
           websocketUrl: this.getWebSocketUrl(),
         },
       });
+    });
+
+    this.expressApp.get('/inspector', (req: Request<unknown, unknown, unknown, { token?: string }>, res: Response) => {
+      res.type('html').send(renderInspectorPage(this.getUrl() ?? 'http://127.0.0.1', req.query.token));
     });
 
     this.expressApp.get('/snapshot', this.requireAuth('snapshot:read'), (_req: Request, res: Response) => {
@@ -603,6 +608,15 @@ export class RestServer {
     }
 
     return `ws://${this.params.host ?? '127.0.0.1'}:${port}${this.params.websocket?.path ?? this.params.websocketPath ?? '/ws'}`;
+  }
+
+  getInspectorUrl(): string | undefined {
+    const url = this.getUrl();
+    if (!url) {
+      return undefined;
+    }
+
+    return `${url}/inspector`;
   }
 
   private async performLifecycleAction(action: string): Promise<IoTAppStatus> {

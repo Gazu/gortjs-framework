@@ -2,7 +2,7 @@
 
 `@gortjs/core` is the main GortJS runtime package. It provides `IoTApp`, the built-in drivers, device orchestration, command dispatching, automation, persistence, configuration loading, and health reporting.
 
-Documented for release `0.6.0`.
+Documented for release `0.8.0`.
 
 ## Purpose
 
@@ -10,12 +10,11 @@ Documented for release `0.6.0`.
 - Run the same application logic with real hardware or simulation.
 - Provide a clean entry point for building modular IoT applications.
 
-## Highlights in 0.6.0
+## Highlights in 0.8.0
 
-- Workflow engine v2 with retries, branch steps, and explicit step-level error handling
-- Cron-like schedules, queue/forbid concurrency policies, and schedulable job inspection
-- Snapshot import support for rebuilding runtime topology while the app is stopped
-- Formal plugin catalog support for drivers and device types
+- Plugin SDK helpers for `definePlugin`, `createPluginManifest`, and `defineDriverFactory`
+- Explicit plugin compatibility summaries and support for plugin API `0.6` and `0.8`
+- Same automation/runtime base from `0.7.0`, now wrapped in a better adoption surface
 
 ## Installation
 
@@ -34,6 +33,9 @@ npm install @gortjs/core @gortjs/contracts @gortjs/devices @gortjs/events
 - `BoardManager`
 - `CommandDispatcher`
 - `DeviceRegistry`
+- `definePlugin`
+- `createPluginManifest`
+- `defineDriverFactory`
 
 ## Lifecycle example
 

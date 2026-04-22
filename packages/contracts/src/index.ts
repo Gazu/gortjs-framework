@@ -12,3 +12,4 @@ export * from './plugins/plugin-types';
 export * from './runtime/runtime-types';
 export * from './serialization/event-serializer';
 export * from './time/timezone';
+export * from './version/compatibility';
