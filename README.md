@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.7.0`
+Current documented release: `0.8.0`
 
 ## Core idea
 
@@ -20,13 +20,13 @@ Current documented release: `0.7.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.7.0
+## What changed in 0.8.0
 
-- Distributed runtime foundations with node identity, control-plane awareness, and remote command routing.
-- Formal storage adapters for `file`, `memory`, and `redis`.
-- External event interoperability through runtime adapters for Redis and webhooks, plus an MQTT-ready contract surface.
-- Stronger WebSocket streaming with subscription filters, replay, and slow-client handling.
-- Rotatable auth keys, environment-resolved secrets, and harder operational defaults for connected deployments.
+- Official CLI flows for `templates`, `create`, `scaffold`, `dashboard`, and `compat`.
+- Browser-based runtime inspector at `/inspector` for devices, workflows, events, plugins, metrics, and cluster state.
+- Friendlier plugin SDK helpers through `definePlugin`, `createPluginManifest`, and `defineDriverFactory`.
+- Explicit version and compatibility metadata in runtime summaries.
+- Production-oriented scaffolds and product documentation for faster adoption.
 
 ## Quick start
 
@@ -35,6 +35,7 @@ npm install
 npm run build
 npm test
 npm start
+npm run cli -- templates
 ```
 
 ## Minimal example
@@ -65,6 +66,15 @@ await runtime.dispose();
 - Run declarative automation rules triggered by device events.
 - Inspect plugin catalogs and scheduled jobs through the admin API or CLI.
 - Move from a single local app to a connected multi-runtime topology with a control plane.
+- Bootstrap new apps and extension points from the official `0.8.0` templates and scaffolds.
+
+## Product docs
+
+- [docs/getting-started.md](./docs/getting-started.md)
+- [docs/cookbook.md](./docs/cookbook.md)
+- [docs/guides/distributed-runtime.md](./docs/guides/distributed-runtime.md)
+- [docs/guides/mock-to-hardware.md](./docs/guides/mock-to-hardware.md)
+- [docs/migration-guides/0.7-to-0.8.md](./docs/migration-guides/0.7-to-0.8.md)
 
 ## Package documentation
 

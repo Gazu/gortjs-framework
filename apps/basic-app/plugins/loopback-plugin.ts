@@ -1,16 +1,15 @@
-import type { GortPlugin } from '@gortjs/core';
-import { MockDriver } from '@gortjs/core';
+import { MockDriver, createPluginManifest, defineDriverFactory, definePlugin } from '@gortjs/core';
 import { LedDevice } from '@gortjs/devices';
 
 class LoopbackDriver extends MockDriver {
   readonly name = 'loopback';
 }
 
-const loopbackPlugin: GortPlugin = {
-  manifest: {
+const loopbackPlugin = definePlugin({
+  manifest: createPluginManifest({
     name: 'loopback-plugin',
-    version: '0.6.0',
-    apiVersion: '0.6',
+    version: '0.8.0',
+    apiVersion: '0.8',
     description: 'Adds a loopback driver and a virtual LED device type for local runtime demos.',
     keywords: ['demo', 'loopback', 'mock', 'plugin'],
     capabilities: {
@@ -40,11 +39,11 @@ const loopbackPlugin: GortPlugin = {
         },
       ],
     },
-  },
+  }),
   register(api) {
-    api.registerDriver('loopback', () => new LoopbackDriver());
+    api.registerDriver('loopback', defineDriverFactory(() => new LoopbackDriver()));
     api.registerDeviceType('virtual-led', LedDevice);
   },
-};
+});
 
 export default loopbackPlugin;

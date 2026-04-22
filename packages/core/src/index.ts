@@ -17,6 +17,7 @@ export * from './persistence/memory-persistence';
 export * from './persistence/persistence-factory';
 export * from './persistence/redis-persistence';
 export * from './plugins/plugin-registry';
+export * from './plugins/plugin-sdk';
 export * from './plugins/plugin-types';
 export * from './telemetry/event-serializer';
 export * from './drivers/mock/mock-driver';

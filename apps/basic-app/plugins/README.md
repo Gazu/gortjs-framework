@@ -8,6 +8,7 @@ This folder contains local plugin examples for `basic-app`.
 
 - a `loopback` driver backed by the mock runtime
 - a `virtual-led` device type backed by `LedDevice`
+- a `0.8` plugin manifest using the new SDK helpers
 
 ## Try it
 

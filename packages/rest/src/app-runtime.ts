@@ -8,6 +8,12 @@ import type {
   RuntimeProfileConfig,
   RuntimeNodeSummary,
 } from '@gortjs/contracts';
+import {
+  GORTJS_FRAMEWORK_VERSION as FRAMEWORK_VERSION,
+  GORTJS_PACKAGE_VERSIONS as PACKAGE_VERSIONS,
+  GORTJS_PLUGIN_API_VERSION as PLUGIN_API_VERSION,
+  GORTJS_SUPPORTED_PLUGIN_API_VERSIONS as SUPPORTED_PLUGIN_API_VERSIONS,
+} from '@gortjs/contracts';
 import { IoTApp, PluginRegistry, JohnnyFiveDriver, MockDriver } from '@gortjs/core';
 import type { GortPlugin } from '@gortjs/core';
 import { RestServer } from './rest-server';
@@ -205,6 +211,12 @@ export class AppRuntime {
               availableDrivers: plugins.listDrivers(),
               availableDeviceTypes: plugins.listDeviceTypes(),
               jobs: app.getWorkflowJobs(),
+              versions: {
+                framework: FRAMEWORK_VERSION,
+                pluginApiVersion: PLUGIN_API_VERSION,
+                supportedPluginApiVersions: [...SUPPORTED_PLUGIN_API_VERSIONS],
+                packages: { ...PACKAGE_VERSIONS },
+              },
               cluster: clusterManager.getClusterState(),
               eventAdapters: eventBridge.getStatuses(),
               storage: {
@@ -245,6 +257,12 @@ export class AppRuntime {
           availableDrivers: plugins.listDrivers(),
           availableDeviceTypes: plugins.listDeviceTypes(),
           jobs: app.getWorkflowJobs(),
+          versions: {
+            framework: FRAMEWORK_VERSION,
+            pluginApiVersion: PLUGIN_API_VERSION,
+            supportedPluginApiVersions: [...SUPPORTED_PLUGIN_API_VERSIONS],
+            packages: { ...PACKAGE_VERSIONS },
+          },
           cluster: clusterManager.getClusterState(),
           eventAdapters: eventBridge.getStatuses(),
           storage: {
