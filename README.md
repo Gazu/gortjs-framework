@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.6.0`
+Current documented release: `0.7.0`
 
 ## Core idea
 
@@ -20,13 +20,13 @@ Current documented release: `0.6.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.6.0
+## What changed in 0.7.0
 
-- Formal plugin manifests and plugin catalog support.
-- Workflow engine v2 with branch steps, retries, explicit error handling, and cron-like schedules.
-- Scheduler job inspection with concurrency policies and runtime-aware time handling.
-- Expanded admin REST surface for plugins, jobs, runtime introspection, workflow execution, and snapshot import.
-- Official monorepo CLI for config validation, runtime startup, and runtime inspection.
+- Distributed runtime foundations with node identity, control-plane awareness, and remote command routing.
+- Formal storage adapters for `file`, `memory`, and `redis`.
+- External event interoperability through runtime adapters for Redis and webhooks, plus an MQTT-ready contract surface.
+- Stronger WebSocket streaming with subscription filters, replay, and slow-client handling.
+- Rotatable auth keys, environment-resolved secrets, and harder operational defaults for connected deployments.
 
 ## Quick start
 
@@ -60,10 +60,11 @@ await runtime.dispose();
 
 - Build a local IoT app against `mock`, then switch to `johnny-five` for real hardware.
 - Register devices declaratively from a JSON config file.
-- Expose runtime state over REST and WebSocket.
+- Expose runtime state over REST and filtered WebSocket streams.
 - Persist events and state snapshots for debugging and auditability.
 - Run declarative automation rules triggered by device events.
 - Inspect plugin catalogs and scheduled jobs through the admin API or CLI.
+- Move from a single local app to a connected multi-runtime topology with a control plane.
 
 ## Package documentation
 

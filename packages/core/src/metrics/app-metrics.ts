@@ -9,6 +9,10 @@ export class AppMetricsService {
     rulesExecuted: 0,
     workflowsExecuted: 0,
     scheduledExecutions: 0,
+    remoteCommandsRouted: 0,
+    remoteCommandsReceived: 0,
+    clusterSyncs: 0,
+    websocketDroppedClients: 0,
   };
 
   increment(metric: keyof IoTAppMetrics, amount = 1): void {

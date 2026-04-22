@@ -3,12 +3,15 @@ import type { DeviceState, DeviceType } from '../devices/device-types';
 export interface TransportEventMessage {
   eventName: string;
   payload: unknown;
+  originNodeId?: string;
+  timestamp?: string;
 }
 
 export interface EventHistoryEntry {
   eventName: string;
   payload: unknown;
   timestamp: string;
+  originNodeId?: string;
 }
 
 export interface EventHistoryQuery {
@@ -26,6 +29,22 @@ export interface EventHistoryPage {
   page: number;
   pageSize: number;
   hasNextPage: boolean;
+}
+
+export interface EventStreamFilter {
+  eventName?: string;
+  deviceId?: string;
+}
+
+export interface RuntimeEventAdapterStatus {
+  type: string;
+  direction: 'inbound' | 'outbound' | 'both';
+  enabled: boolean;
+  healthy: boolean;
+  target?: string;
+  lastError?: string;
+  lastEventAt?: string;
+  note?: string;
 }
 
 export interface DeviceEventEnvelope<TPayload = Record<string, unknown>> {

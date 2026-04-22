@@ -4,19 +4,32 @@ import type { DeviceConfig, DeviceState } from '../devices/device-types';
 import type { EventBusHealth } from '../events/event-types';
 import type { PersistenceConfig, PersistenceHealth } from '../persistence/persistence-types';
 import type { LoadedPluginSummary } from '../plugins/plugin-types';
-import type { RuntimeSummary, WorkflowJobStatus } from '../runtime/runtime-types';
+import type { ClusterStateSummary, RuntimeNodeRole, RuntimeNodeSummary, RuntimeSummary, WorkflowJobStatus } from '../runtime/runtime-types';
 
 export type IoTAppStatus = 'created' | 'attached' | 'running' | 'stopped' | 'disposed' | 'error';
 export type SupportedDriverName = 'johnny-five' | 'mock';
 export type RestAuthMode = 'static' | 'jwt';
+export type EventAdapterType = 'redis' | 'mqtt' | 'webhook';
+export type EventAdapterDirection = 'inbound' | 'outbound' | 'both';
+export type WebSocketSlowClientPolicy = 'drop' | 'terminate';
+
+export interface SecretEnvValue {
+  env: string;
+  fallback?: string;
+  required?: boolean;
+}
 
 export interface RestAuthConfig {
   enabled?: boolean;
   mode: RestAuthMode;
   token?: string;
+  tokenEnv?: string;
   tokenScopes?: string[];
   publicKey?: string;
+  publicKeyEnv?: string;
   publicKeyFile?: string;
+  publicKeyFileEnv?: string;
+  publicKeyFiles?: string[];
   algorithms?: Array<'RS256'>;
   issuer?: string;
   audience?: string | string[];
@@ -43,7 +56,46 @@ export interface RestServerConfig {
   host?: string;
   port?: number;
   websocketPath?: string;
+  websocket?: {
+    path?: string;
+    replayLimit?: number;
+    maxBufferedBytes?: number;
+    slowClientPolicy?: WebSocketSlowClientPolicy;
+  };
   auth?: RestAuthConfig;
+}
+
+export interface RuntimeEventAdapterConfig {
+  type: EventAdapterType;
+  direction?: EventAdapterDirection;
+  target?: string;
+  channel?: string;
+  topic?: string;
+  headers?: Record<string, string>;
+  token?: string;
+  tokenEnv?: string;
+  enabled?: boolean;
+}
+
+export interface ClusterRemoteNodeConfig {
+  nodeId: string;
+  url: string;
+  role?: RuntimeNodeRole;
+}
+
+export interface RuntimeClusterConfig {
+  enabled?: boolean;
+  role?: RuntimeNodeRole;
+  nodeId?: string;
+  advertisedUrl?: string;
+  controlPlaneUrl?: string;
+  sharedToken?: string;
+  sharedTokenEnv?: string;
+  remoteCommandRouting?: boolean;
+  syncEvents?: boolean;
+  syncState?: boolean;
+  heartbeatIntervalMs?: number;
+  remotes?: ClusterRemoteNodeConfig[];
 }
 
 export interface IoTRuntimeConfig {
@@ -54,6 +106,10 @@ export interface IoTRuntimeConfig {
   metrics?: {
     enabled?: boolean;
   };
+  events?: {
+    adapters?: RuntimeEventAdapterConfig[];
+  };
+  cluster?: RuntimeClusterConfig;
 }
 
 export interface PluginReferenceConfig {
@@ -77,6 +133,10 @@ export interface IoTAppMetrics {
   rulesExecuted: number;
   workflowsExecuted: number;
   scheduledExecutions: number;
+  remoteCommandsRouted: number;
+  remoteCommandsReceived: number;
+  clusterSyncs: number;
+  websocketDroppedClients: number;
 }
 
 export interface IoTAppSnapshot {
@@ -128,6 +188,16 @@ export interface RuntimeAdminProvider {
   getPluginCatalog(): LoadedPluginSummary[];
   getRuntimeSummary(): RuntimeSummary;
   getJobs(): WorkflowJobStatus[];
+  getClusterState?(): ClusterStateSummary;
+  listClusterNodes?(): RuntimeNodeSummary[];
+  registerClusterNode?(node: RuntimeNodeSummary & { devices?: DeviceState[] }): void;
+  recordClusterEvent?(entry: { nodeId: string; eventName: string; timestamp: string; payload?: unknown }): void;
+  routeCommand?(
+    deviceId: string,
+    command: string,
+    payload?: Record<string, unknown>,
+  ): Promise<{ ok: boolean; state?: unknown; routedTo?: string; error?: string }>;
+  ingestEvent?(eventName: string, payload?: unknown, sourceNodeId?: string): void;
 }
 
 export type ConfigValidationIssues = ConfigValidationIssue[];

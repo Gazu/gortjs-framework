@@ -17,9 +17,9 @@ import {
   EventHistoryEntry,
   EventHistoryPage,
   EventHistoryQuery,
+  FilePersistenceConfig,
   PersistenceProvider,
   PersistenceHealth,
-  PersistenceConfig,
   createTimestamp,
   parseTimestamp,
 } from '@gortjs/contracts';
@@ -49,7 +49,7 @@ export class FilePersistence implements PersistenceProvider {
   constructor(
     private readonly params: {
       eventBus: EventBusContract;
-      config: PersistenceConfig;
+      config: FilePersistenceConfig;
     },
   ) {
     this.eventLogFile = join(
@@ -140,6 +140,7 @@ export class FilePersistence implements PersistenceProvider {
 
     return {
       enabled: true,
+      adapter: 'file',
       initialized: this.initialized,
       directory: this.params.config.directory,
       eventLogFile: this.eventLogFile,
