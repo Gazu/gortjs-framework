@@ -19,6 +19,7 @@ import type { GortPlugin } from '@gortjs/core';
 import { RestServer } from './rest-server';
 import { ClusterManager } from './cluster-manager';
 import { RuntimeEventBridge } from './runtime-event-bridge';
+import { RuntimeLogger } from './runtime-logger';
 
 function mergeProfile(base: IoTAppConfig, profile?: RuntimeProfileConfig): IoTAppConfig {
   if (!profile) {
@@ -70,6 +71,13 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
     }
   }
 
+  if (config.runtime?.logging?.file) {
+    config.runtime.logging.file = resolveMaybe(config.runtime.logging.file)!;
+  }
+  if (config.runtime?.logging?.auditFile) {
+    config.runtime.logging.auditFile = resolveMaybe(config.runtime.logging.auditFile)!;
+  }
+
   for (const profile of Object.values(config.profiles ?? {})) {
     if (profile.persistence?.adapter !== 'memory' && profile.persistence && 'directory' in profile.persistence && profile.persistence.directory) {
       profile.persistence.directory = resolveMaybe(profile.persistence.directory)!;
@@ -86,6 +94,13 @@ function resolveRuntimePaths(config: IoTAppConfig, filePath: string): IoTAppConf
       if (pluginRef.path) {
         pluginRef.path = resolveMaybe(pluginRef.path)!;
       }
+    }
+
+    if (profile.runtime?.logging?.file) {
+      profile.runtime.logging.file = resolveMaybe(profile.runtime.logging.file)!;
+    }
+    if (profile.runtime?.logging?.auditFile) {
+      profile.runtime.logging.auditFile = resolveMaybe(profile.runtime.logging.auditFile)!;
     }
   }
 
@@ -152,11 +167,14 @@ export class AppRuntime {
       admin: RuntimeAdminProvider;
       clusterManager?: ClusterManager;
       eventBridge?: RuntimeEventBridge;
+      logger: RuntimeLogger;
+      plugins: PluginRegistry;
     },
   ) {}
 
   static async fromConfig(config: IoTAppConfig, options: AppRuntimeOptions = {}): Promise<AppRuntime> {
     const effectiveConfig = resolveRuntimeSecrets(this.resolveConfig(config));
+    const logger = new RuntimeLogger(effectiveConfig.runtime?.logging);
     const plugins = new PluginRegistry({
       plugins: options.plugins,
       deviceTypes: options.deviceTypes,
@@ -190,6 +208,7 @@ export class AppRuntime {
       app,
       config: effectiveConfig,
       getLocalUrl: () => restServer?.getUrl(),
+      logger,
     });
     const eventBridge = new RuntimeEventBridge({
       app,
@@ -205,6 +224,8 @@ export class AppRuntime {
           admin: {
             getPluginCatalog: () => plugins.listPlugins(),
             getJobs: () => app.getWorkflowJobs(),
+            getLogs: (limit) => logger.getLogs(limit),
+            getAuditTrail: (limit) => logger.getAuditTrail(limit),
             getRuntimeSummary: () => ({
               config: effectiveConfig,
               plugins: plugins.listPlugins(),
@@ -231,7 +252,7 @@ export class AppRuntime {
             recordClusterEvent: ({ nodeId, eventName, timestamp }) => {
               clusterManager.recordRemoteEvent({ nodeId, eventName, timestamp });
             },
-            routeCommand: (deviceId, command, payload) => clusterManager.routeCommand(deviceId, command, payload),
+            routeCommand: (deviceId, command, payload, context) => clusterManager.routeCommand(deviceId, command, payload, context),
             ingestEvent: (eventName, payload) => {
               app.ingestEvent(eventName, payload);
             },
@@ -242,6 +263,7 @@ export class AppRuntime {
           websocket: effectiveConfig.rest?.websocket,
           auth: effectiveConfig.rest?.auth,
           cluster: effectiveConfig.runtime?.cluster,
+          logger,
         });
 
     return new AppRuntime({
@@ -251,6 +273,8 @@ export class AppRuntime {
       admin: {
         getPluginCatalog: () => plugins.listPlugins(),
         getJobs: () => app.getWorkflowJobs(),
+        getLogs: (limit) => logger.getLogs(limit),
+        getAuditTrail: (limit) => logger.getAuditTrail(limit),
         getRuntimeSummary: () => ({
           config: effectiveConfig,
           plugins: plugins.listPlugins(),
@@ -277,13 +301,15 @@ export class AppRuntime {
         recordClusterEvent: ({ nodeId, eventName, timestamp }) => {
           clusterManager.recordRemoteEvent({ nodeId, eventName, timestamp });
         },
-        routeCommand: (deviceId, command, payload) => clusterManager.routeCommand(deviceId, command, payload),
+        routeCommand: (deviceId, command, payload, context) => clusterManager.routeCommand(deviceId, command, payload, context),
         ingestEvent: (eventName, payload) => {
           app.ingestEvent(eventName, payload);
         },
       },
       clusterManager,
       eventBridge,
+      logger,
+      plugins,
     });
   }
 
@@ -310,22 +336,40 @@ export class AppRuntime {
   }
 
   async start(): Promise<void> {
+    this.params.logger.info('runtime', 'Starting runtime', {
+      nodeId: this.params.config.runtime?.cluster?.nodeId,
+      driver: this.params.config.runtime?.driver ?? 'johnny-five',
+    });
     await this.params.app.start();
+    await this.params.plugins.startPlugins({ app: this.params.app, config: this.params.config });
+    await this.params.plugins.refreshPluginHealth({ app: this.params.app, config: this.params.config });
     await this.params.eventBridge?.start();
     await this.params.restServer?.start();
     await this.params.clusterManager?.start();
+    this.params.logger.info('runtime', 'Runtime started', {
+      url: this.params.restServer?.getUrl(),
+      inspectorUrl: this.params.restServer?.getInspectorUrl?.(),
+    });
   }
 
   async stop(): Promise<void> {
     await this.params.clusterManager?.stop();
     await this.params.restServer?.stop();
     await this.params.eventBridge?.stop();
+    await this.params.plugins.stopPlugins({ app: this.params.app, config: this.params.config });
     await this.params.app.stop();
+    this.params.logger.info('runtime', 'Runtime stopped', {
+      nodeId: this.params.config.runtime?.cluster?.nodeId,
+    });
   }
 
   async dispose(): Promise<void> {
     await this.stop();
+    await this.params.plugins.disposePlugins({ app: this.params.app, config: this.params.config });
     await this.params.app.dispose();
+    this.params.logger.info('runtime', 'Runtime disposed', {
+      nodeId: this.params.config.runtime?.cluster?.nodeId,
+    });
   }
 
   private static resolveConfig(config: IoTAppConfig): IoTAppConfig {

@@ -1,6 +1,6 @@
 # Examples
 
-GortJS `0.8.0` ships its adoption story through the CLI rather than through a large number of baked monorepo apps.
+GortJS `0.9.0` ships its adoption story through the CLI rather than through a large number of baked monorepo apps.
 
 Recommended entry points:
 

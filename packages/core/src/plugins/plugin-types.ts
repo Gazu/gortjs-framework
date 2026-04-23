@@ -1,10 +1,12 @@
 import type {
   DeviceConstructor,
   DriverContract,
+  IoTAppConfig,
   LoadedPluginSummary,
   PluginApiVersion,
   PluginCapabilityCatalog,
   PluginCompatibilitySummary,
+  PluginHealthSummary,
   PluginManifest,
   PluginReferenceConfig,
   SupportedDriverName,
@@ -13,8 +15,14 @@ import {
   GORTJS_PLUGIN_API_VERSION,
   GORTJS_SUPPORTED_PLUGIN_API_VERSIONS,
 } from '@gortjs/contracts';
+import type { IoTApp } from '../iot-app';
 
 export type DriverFactory = () => DriverContract;
+
+export interface PluginLifecycleContext {
+  app: IoTApp;
+  config: IoTAppConfig;
+}
 
 export interface PluginApi {
   registerDeviceType(type: string, deviceConstructor: DeviceConstructor): void;
@@ -24,6 +32,10 @@ export interface PluginApi {
 export interface GortPlugin {
   manifest: PluginManifest;
   register(api: PluginApi, options?: PluginReferenceConfig['options']): void | Promise<void>;
+  start?(context: PluginLifecycleContext): void | Promise<void>;
+  stop?(context: PluginLifecycleContext): void | Promise<void>;
+  dispose?(context: PluginLifecycleContext): void | Promise<void>;
+  healthCheck?(context: PluginLifecycleContext): PluginHealthSummary | Promise<PluginHealthSummary>;
 }
 
 export interface RegisteredPluginState extends LoadedPluginSummary {

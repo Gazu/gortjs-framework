@@ -1,9 +1,10 @@
-import type { DeviceConstructor, PluginManifest, SupportedDriverName } from '@gortjs/contracts';
+import { createTimestamp, type DeviceConstructor, type IoTAppConfig, type PluginHealthSummary, type PluginManifest, type SupportedDriverName } from '@gortjs/contracts';
 import type { DriverContract, LoadedPluginSummary } from '@gortjs/contracts';
 import {
   GORTJS_SUPPORTED_PLUGIN_API_VERSIONS,
 } from '@gortjs/contracts';
-import type { DriverFactory, GortPlugin, PluginApi, RegisteredPluginState } from './plugin-types';
+import type { IoTApp } from '../iot-app';
+import type { DriverFactory, GortPlugin, PluginApi, PluginLifecycleContext, RegisteredPluginState } from './plugin-types';
 import { getPluginCompatibility, normalizePluginCapabilities } from './plugin-types';
 
 export class PluginRegistry implements PluginApi {
@@ -50,6 +51,8 @@ export class PluginRegistry implements PluginApi {
     state.applied = true;
     state.source = modulePath ? 'module' : state.source;
     state.modulePath = modulePath ?? state.modulePath;
+    state.runtime.state = 'applied';
+    state.runtime.lastAppliedAt = createTimestamp();
   }
 
   registerDeviceType(type: string, deviceConstructor: DeviceConstructor): void {
@@ -67,10 +70,18 @@ export class PluginRegistry implements PluginApi {
       manifest: plugin.manifest,
       capabilities: normalizePluginCapabilities(plugin.manifest.capabilities),
       compatibility: getPluginCompatibility(plugin.manifest.apiVersion),
+      runtime: {
+        state: 'loaded',
+        hooks: this.getHookNames(plugin),
+      },
       source,
       modulePath,
       applied: false,
       register: plugin.register,
+      start: plugin.start,
+      stop: plugin.stop,
+      dispose: plugin.dispose,
+      healthCheck: plugin.healthCheck,
     } as RegisteredPluginState & { register: GortPlugin['register'] });
   }
 
@@ -83,10 +94,48 @@ export class PluginRegistry implements PluginApi {
       keywords: plugin.keywords,
       capabilities: plugin.capabilities,
       compatibility: plugin.compatibility,
+      runtime: plugin.runtime,
       source: plugin.source,
       modulePath: plugin.modulePath,
       applied: plugin.applied,
     }));
+  }
+
+  async startPlugins(context: PluginLifecycleContext): Promise<void> {
+    await this.runHook('start', context, 'started', 'lastStartedAt');
+  }
+
+  async stopPlugins(context: PluginLifecycleContext): Promise<void> {
+    await this.runHook('stop', context, 'stopped', 'lastStoppedAt');
+  }
+
+  async disposePlugins(context: PluginLifecycleContext): Promise<void> {
+    await this.runHook('dispose', context, 'disposed', 'lastDisposedAt');
+  }
+
+  async refreshPluginHealth(context: PluginLifecycleContext): Promise<void> {
+    for (const state of this.plugins.values()) {
+      const healthCheck = (state as RegisteredPluginState & { healthCheck?: GortPlugin['healthCheck'] }).healthCheck;
+      if (!healthCheck) {
+        continue;
+      }
+
+      try {
+        const health = await healthCheck(context) as PluginHealthSummary;
+        state.runtime.health = {
+          ...health,
+          checkedAt: health.checkedAt ?? createTimestamp(),
+        };
+      } catch (error) {
+        state.runtime.health = {
+          ok: false,
+          checkedAt: createTimestamp(),
+          message: error instanceof Error ? error.message : String(error),
+        };
+        state.runtime.state = 'error';
+        state.runtime.lastError = state.runtime.health.message;
+      }
+    }
   }
 
   listDrivers(): string[] {
@@ -124,5 +173,41 @@ export class PluginRegistry implements PluginApi {
         `Plugin '${manifest.name}' declares unsupported apiVersion '${manifest.apiVersion}'. Supported versions: ${GORTJS_SUPPORTED_PLUGIN_API_VERSIONS.join(', ')}`,
       );
     }
+  }
+
+  private async runHook(
+    hookName: 'start' | 'stop' | 'dispose',
+    context: PluginLifecycleContext,
+    targetState: 'started' | 'stopped' | 'disposed',
+    timestampField: 'lastStartedAt' | 'lastStoppedAt' | 'lastDisposedAt',
+  ): Promise<void> {
+    for (const state of this.plugins.values()) {
+      const hook = (state as RegisteredPluginState & { [key: string]: unknown })[hookName] as
+        | ((context: PluginLifecycleContext) => void | Promise<void>)
+        | undefined;
+      if (!hook) {
+        if (state.applied) {
+          state.runtime.state = targetState;
+          state.runtime[timestampField] = createTimestamp();
+        }
+        continue;
+      }
+
+      try {
+        await hook(context);
+        state.runtime.state = targetState;
+        state.runtime[timestampField] = createTimestamp();
+        state.runtime.lastError = undefined;
+      } catch (error) {
+        state.runtime.state = 'error';
+        state.runtime.lastError = error instanceof Error ? error.message : String(error);
+        throw error;
+      }
+    }
+  }
+
+  private getHookNames(plugin: GortPlugin): string[] {
+    return ['register', 'start', 'stop', 'dispose', 'healthCheck']
+      .filter((hookName) => typeof (plugin as unknown as Record<string, unknown>)[hookName] === 'function');
   }
 }

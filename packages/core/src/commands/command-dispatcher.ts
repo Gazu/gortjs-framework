@@ -27,6 +27,10 @@ export class CommandDispatcher {
     deviceId: string,
     commandOrName: DeviceCommand | string,
     payload: Record<string, unknown> = {},
+    context?: {
+      requestId?: string;
+      correlationId?: string;
+    },
   ) {
     const command = normalizeCommand(commandOrName, payload);
     let deviceType = 'unknown';
@@ -40,6 +44,8 @@ export class CommandDispatcher {
         deviceType,
         payload: { command },
         timestamp: createTimestamp(),
+        requestId: context?.requestId,
+        correlationId: context?.correlationId,
       });
 
       if (typeof device.execute !== 'function') {
@@ -57,6 +63,8 @@ export class CommandDispatcher {
           state,
         },
         timestamp: createTimestamp(),
+        requestId: context?.requestId,
+        correlationId: context?.correlationId,
       });
 
       return state;
@@ -70,6 +78,8 @@ export class CommandDispatcher {
           error: message,
         },
         timestamp: createTimestamp(),
+        requestId: context?.requestId,
+        correlationId: context?.correlationId,
       });
       throw error;
     }

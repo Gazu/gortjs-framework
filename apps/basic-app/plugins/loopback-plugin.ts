@@ -8,8 +8,8 @@ class LoopbackDriver extends MockDriver {
 const loopbackPlugin = definePlugin({
   manifest: createPluginManifest({
     name: 'loopback-plugin',
-    version: '0.8.0',
-    apiVersion: '0.8',
+    version: '0.9.0',
+    apiVersion: '0.9',
     description: 'Adds a loopback driver and a virtual LED device type for local runtime demos.',
     keywords: ['demo', 'loopback', 'mock', 'plugin'],
     capabilities: {
@@ -43,6 +43,12 @@ const loopbackPlugin = definePlugin({
   register(api) {
     api.registerDriver('loopback', defineDriverFactory(() => new LoopbackDriver()));
     api.registerDeviceType('virtual-led', LedDevice);
+  },
+  healthCheck() {
+    return {
+      ok: true,
+      message: 'loopback plugin ready',
+    };
   },
 });
 
