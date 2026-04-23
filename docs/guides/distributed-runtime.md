@@ -1,6 +1,6 @@
 # Guide: Distributed Runtime
 
-Use GortJS `0.8.0` when you want a smoother path from local prototypes to connected runtimes.
+Use GortJS `0.9.0` when you want a smoother path from local prototypes to connected runtimes with more production-ready health and diagnostics.
 
 ## Recommended local topology
 
@@ -37,6 +37,9 @@ GORT_CLUSTER_TOKEN=cluster-secret GORT_API_TOKEN=api-secret npm run start:edge
 - cluster state: `GET /cluster`
 - node inventory: `GET /cluster/nodes`
 - browser inspector: `GET /inspector`
+- runtime logs: `GET /logs`
+- audit trail: `GET /audit`
+- readiness probe: `GET /health/ready`
 
 ## Operational notes
 

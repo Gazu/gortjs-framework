@@ -310,9 +310,13 @@ export class IoTApp {
     deviceId: string,
     command: DeviceCommand | string,
     payload: Record<string, unknown> = {},
+    context?: {
+      requestId?: string;
+      correlationId?: string;
+    },
   ) {
     this.metrics.increment('commandsDispatched');
-    return this.commandDispatcher.dispatch(deviceId, command, payload);
+    return this.commandDispatcher.dispatch(deviceId, command, payload, context);
   }
 
   async executeWorkflow(workflowId: string, input?: Record<string, unknown>): Promise<void> {

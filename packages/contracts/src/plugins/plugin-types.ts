@@ -1,6 +1,7 @@
 import type { SupportedDriverName } from '../app/iot-app-types';
 
-export type PluginApiVersion = '0.6' | '0.8';
+export type PluginApiVersion = '0.6' | '0.8' | '0.9';
+export type PluginRuntimeState = 'loaded' | 'applied' | 'started' | 'stopped' | 'disposed' | 'error';
 
 export interface PluginCapabilityDescriptor {
   id: string;
@@ -31,6 +32,24 @@ export interface PluginCompatibilitySummary {
   supportedApiVersions: PluginApiVersion[];
 }
 
+export interface PluginHealthSummary {
+  ok: boolean;
+  checkedAt?: string;
+  message?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface PluginRuntimeSummary {
+  state: PluginRuntimeState;
+  hooks: string[];
+  lastAppliedAt?: string;
+  lastStartedAt?: string;
+  lastStoppedAt?: string;
+  lastDisposedAt?: string;
+  lastError?: string;
+  health?: PluginHealthSummary;
+}
+
 export interface LoadedPluginSummary {
   name: string;
   version: string;
@@ -39,6 +58,7 @@ export interface LoadedPluginSummary {
   keywords?: string[];
   capabilities: PluginCapabilityCatalog;
   compatibility: PluginCompatibilitySummary;
+  runtime: PluginRuntimeSummary;
   source: 'inline' | 'module';
   modulePath?: string;
   applied: boolean;

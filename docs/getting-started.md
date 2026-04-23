@@ -1,6 +1,6 @@
-# Getting Started with GortJS 0.8.0
+# Getting Started with GortJS 0.9.0
 
-GortJS `0.8.0` focuses on developer experience and adoption. The quickest way to start is through the official CLI.
+GortJS `0.9.0` keeps the developer experience improvements from `0.8.0` and adds stronger operational tooling. The quickest way to start is still through the official CLI.
 
 ## 1. Install dependencies
 
@@ -15,7 +15,7 @@ npm run build
 npm run cli -- templates
 ```
 
-Templates available in `0.8.0`:
+Templates available in `0.9.0`:
 
 - `minimal`: smallest runnable runtime with REST and WebSocket
 - `auth`: env-backed auth and secure API defaults
@@ -72,9 +72,19 @@ This prints:
 - supported plugin API versions
 - package version alignment across the monorepo
 
+## Operational follow-up
+
+Once your runtime is up, inspect its operational surfaces:
+
+```bash
+npm run cli -- logs http://127.0.0.1:3000 --limit=20
+npm run cli -- audit http://127.0.0.1:3000 --limit=20
+```
+
 ## Recommended next reads
 
 - [Cookbook](./cookbook.md)
 - [Distributed runtime guide](./guides/distributed-runtime.md)
 - [Mock to hardware guide](./guides/mock-to-hardware.md)
 - [Migration from 0.7.0 to 0.8.0](./migration-guides/0.7-to-0.8.md)
+- [Migration from 0.8.0 to 0.9.0](./migration-guides/0.8-to-0.9.md)

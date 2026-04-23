@@ -261,6 +261,24 @@ export function renderInspectorPage(baseUrl: string, token?: string): string {
           <pre id="cluster"></pre>
         </div>
       </section>
+      <section class="panel">
+        <header>
+          <h2>Logs</h2>
+          <div class="meta">Recent structured runtime logs.</div>
+        </header>
+        <div class="body">
+          <ul id="logs"></ul>
+        </div>
+      </section>
+      <section class="panel">
+        <header>
+          <h2>Audit</h2>
+          <div class="meta">Recent administrative and command audit entries.</div>
+        </header>
+        <div class="body">
+          <ul id="audit"></ul>
+        </div>
+      </section>
     </main>
     <script>
       const baseUrl = ${JSON.stringify(safeBaseUrl)};
@@ -297,7 +315,7 @@ export function renderInspectorPage(baseUrl: string, token?: string): string {
         statusNode.textContent = 'Refreshing runtime data...';
         statusNode.className = 'meta';
         try {
-          const [status, metrics, devices, workflows, jobs, events, runtime, cluster, plugins] = await Promise.all([
+          const [status, metrics, devices, workflows, jobs, events, runtime, cluster, plugins, logs, audit] = await Promise.all([
             fetchJson('/status'),
             fetchJson('/metrics'),
             fetchJson('/devices'),
@@ -307,6 +325,8 @@ export function renderInspectorPage(baseUrl: string, token?: string): string {
             fetchJson('/runtime'),
             fetchJson('/cluster'),
             fetchJson('/plugins'),
+            fetchJson('/logs?limit=8'),
+            fetchJson('/audit?limit=8'),
           ]);
 
           const overview = document.getElementById('overview');
@@ -335,10 +355,16 @@ export function renderInspectorPage(baseUrl: string, token?: string): string {
           );
 
           renderList('plugins', plugins.plugins || [], (plugin) =>
-            '<li><strong>' + plugin.name + '</strong><div class="meta">v' + plugin.version + ' · api ' + plugin.apiVersion + ' · compatible: ' + String(plugin.compatibility?.supported ?? false) + '</div><pre>' + formatJson(plugin.capabilities || {}) + '</pre></li>'
+            '<li><strong>' + plugin.name + '</strong><div class="meta">v' + plugin.version + ' · api ' + plugin.apiVersion + ' · compatible: ' + String(plugin.compatibility?.supported ?? false) + ' · state: ' + String(plugin.runtime?.state || 'unknown') + '</div><pre>' + formatJson({ capabilities: plugin.capabilities || {}, health: plugin.runtime?.health || null }) + '</pre></li>'
           );
 
           document.getElementById('cluster').textContent = formatJson(cluster);
+          renderList('logs', logs.logs || [], (entry) =>
+            '<li><strong>' + entry.level + '</strong><div class="meta">' + entry.source + ' · ' + entry.timestamp + '</div><pre>' + formatJson({ message: entry.message, details: entry.details || {} }) + '</pre></li>'
+          );
+          renderList('audit', audit.entries || [], (entry) =>
+            '<li><strong>' + entry.action + '</strong><div class="meta">' + entry.resource + ' · ' + entry.outcome + ' · ' + entry.timestamp + '</div><pre>' + formatJson(entry.details || {}) + '</pre></li>'
+          );
           statusNode.textContent = 'Updated at ' + new Date().toLocaleTimeString() + ' · plugin API ' + (runtime.versions?.pluginApiVersion || 'unknown');
         } catch (error) {
           statusNode.textContent = error instanceof Error ? error.message : String(error);

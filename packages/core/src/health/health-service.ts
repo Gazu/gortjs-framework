@@ -41,11 +41,26 @@ export class HealthService {
       };
 
     const board = this.params.boardManager.getHealth();
+    const appStatus = this.params.getAppStatus();
+    const readinessReasons = [
+      ...(board.ready ? [] : ['Board is not ready']),
+      ...(!persistenceHealth.enabled || persistenceHealth.writable ? [] : ['Persistence is not writable']),
+      ...(appStatus === 'running' || appStatus === 'attached' ? [] : [`App status is '${appStatus}'`]),
+    ];
 
     return {
       ok: board.ready && (!persistenceHealth.enabled || persistenceHealth.writable),
+      liveness: {
+        ok: appStatus !== 'disposed' && appStatus !== 'error',
+        status: appStatus,
+      },
+      readiness: {
+        ok: readinessReasons.length === 0,
+        status: appStatus,
+        reasons: readinessReasons,
+      },
       app: {
-        status: this.params.getAppStatus(),
+        status: appStatus,
         timeZone: this.params.getTimeZone(),
         deviceCount: this.params.registry.count(),
         deviceTypeCount: this.params.deviceTypeRegistry.list().length,
