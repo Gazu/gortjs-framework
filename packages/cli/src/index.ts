@@ -25,6 +25,8 @@ function printUsage(): void {
     '  gortjs start <configPath>',
     '  gortjs inspect <url> [--token=TOKEN] [--path=/status]',
     '  gortjs dashboard <url> [--token=TOKEN]',
+    '  gortjs logs <url> [--token=TOKEN] [--limit=50]',
+    '  gortjs audit <url> [--token=TOKEN] [--limit=50]',
     '  gortjs plugins <configPath>',
     '  gortjs cluster <url> [--token=TOKEN]',
     '  gortjs templates',
@@ -108,6 +110,32 @@ async function main(): Promise<void> {
         inspectorUrl: url.toString(),
         note: 'Open the inspector URL in a browser to visualize devices, events, workflows, plugins, and metrics.',
       }, null, 2));
+      return;
+    }
+    case 'logs': {
+      if (!target) {
+        throw new Error('logs requires a base url');
+      }
+      const token = getOption('token', rest);
+      const limit = getOption('limit', rest) ?? '50';
+      const response = await fetch(`${target.replace(/\/$/, '')}/logs?limit=${encodeURIComponent(limit)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const body = await response.json();
+      console.log(JSON.stringify({ status: response.status, body }, null, 2));
+      return;
+    }
+    case 'audit': {
+      if (!target) {
+        throw new Error('audit requires a base url');
+      }
+      const token = getOption('token', rest);
+      const limit = getOption('limit', rest) ?? '50';
+      const response = await fetch(`${target.replace(/\/$/, '')}/audit?limit=${encodeURIComponent(limit)}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      });
+      const body = await response.json();
+      console.log(JSON.stringify({ status: response.status, body }, null, 2));
       return;
     }
     case 'plugins': {

@@ -2,7 +2,7 @@
 
 `@gortjs/contracts` contains the shared contracts and type definitions used across GortJS. It defines the common language between `core`, `devices`, `events`, and `rest`.
 
-Documented for release `0.8.0`.
+Documented for release `0.9.0`.
 
 ## Purpose
 
@@ -24,11 +24,11 @@ Documented for release `0.8.0`.
 - `PersistenceProvider`
 - `EventSerializer`
 
-## 0.8.0 contract additions
+## 0.9.0 contract additions
 
-- explicit framework and plugin API version constants
-- plugin compatibility summaries
-- runtime version metadata for inspector and CLI experiences
+- runtime logging and audit entry contracts
+- plugin runtime lifecycle and health summaries
+- liveness/readiness health structures and event correlation metadata
 
 ## Installation
 

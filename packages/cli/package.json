@@ -1,6 +1,6 @@
 {
   "name": "@gortjs/cli",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "files": ["dist"],
@@ -11,8 +11,8 @@
     "build": "tsc -b"
   },
   "dependencies": {
-    "@gortjs/contracts": "0.8.0",
-    "@gortjs/core": "0.8.0",
-    "@gortjs/rest": "0.8.0"
+    "@gortjs/contracts": "0.9.0",
+    "@gortjs/core": "0.9.0",
+    "@gortjs/rest": "0.9.0"
   }
 }

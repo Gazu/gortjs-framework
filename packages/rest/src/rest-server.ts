@@ -1,12 +1,14 @@
 import express, { type Request, type Response } from 'express';
 import type { Server as HttpServer } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import type { AddressInfo, Socket } from 'node:net';
+import { randomUUID } from 'node:crypto';
 import type { AutomationRule, DeviceConfig, IoTAppImportSnapshot, IoTAppStatus, RestAuthConfig, RuntimeAdminProvider, RuntimeClusterConfig, WebSocketSlowClientPolicy, WorkflowDefinition } from '@gortjs/contracts';
 import { EventSerializer, createTimestamp } from '@gortjs/contracts';
 import { IoTApp } from '@gortjs/core';
 import WebSocket, { WebSocketServer } from 'ws';
 import { AuthService } from './auth-service';
 import { renderInspectorPage } from './inspector-page';
+import type { RuntimeLogger } from './runtime-logger';
 
 type WebSocketClientFilter = {
   eventName?: string;
@@ -20,6 +22,7 @@ export class RestServer {
   private eventBusCleanup?: () => void;
   private readonly authService: AuthService;
   private readonly websocketClientFilters = new WeakMap<WebSocket, WebSocketClientFilter>();
+  private readonly sockets = new Set<Socket>();
   private readonly metrics = {
     requests: 0,
     authFailures: 0,
@@ -42,12 +45,25 @@ export class RestServer {
       };
       auth?: RestAuthConfig;
       cluster?: RuntimeClusterConfig;
+      logger?: RuntimeLogger;
     }
   ) {
     this.authService = new AuthService(params.auth);
     this.expressApp.use(express.json());
-    this.expressApp.use((_, __, next) => {
+    this.expressApp.use((req, res, next) => {
+      const requestId = this.getRequestId(req);
+      const correlationId = this.getCorrelationId(req, requestId);
+      res.setHeader('x-request-id', requestId);
+      res.setHeader('x-correlation-id', correlationId);
+      (req as Request & { requestId?: string; correlationId?: string }).requestId = requestId;
+      (req as Request & { requestId?: string; correlationId?: string }).correlationId = correlationId;
       this.metrics.requests += 1;
+      this.params.logger?.debug('rest', 'Incoming request', {
+        method: req.method,
+        path: req.path,
+        requestId,
+        correlationId,
+      });
       next();
     });
     this.configureRoutes();
@@ -66,6 +82,11 @@ export class RestServer {
         this.metrics.authFailures += 1;
         res.status(result.statusCode ?? 401).json({
           ok: false,
+          error: result.error,
+        });
+        this.params.logger?.audit('auth.http', scopeKey, 'failure', {
+          requestId: this.getRequestId(req),
+          correlationId: this.getCorrelationId(req),
           error: result.error,
         });
         return;
@@ -140,6 +161,33 @@ export class RestServer {
       });
     });
 
+    this.expressApp.get('/health/live', async (_req: Request, res: Response) => {
+      const health = await this.params.app.getHealth();
+      const ok = health.liveness.ok && this.isRunning();
+      res.status(ok ? 200 : 503).json({
+        ok,
+        status: health.liveness.status,
+        running: this.isRunning(),
+      });
+    });
+
+    this.expressApp.get('/health/ready', async (_req: Request, res: Response) => {
+      const health = await this.params.app.getHealth();
+      const cluster = this.params.admin?.getClusterState?.();
+      const reasons = [
+        ...health.readiness.reasons,
+        ...(!cluster?.enabled || cluster.role === 'control-plane' || cluster.role === 'standalone' || cluster.controlPlaneReachable !== false
+          ? []
+          : ['Control plane is unreachable']),
+      ];
+      const ok = reasons.length === 0 && this.isRunning();
+      res.status(ok ? 200 : 503).json({
+        ok,
+        status: health.readiness.status,
+        reasons,
+      });
+    });
+
     this.expressApp.get('/health/deep', this.requireAuth('health:deep:read'), async (_req: Request, res: Response) => {
       const health = await this.params.app.getHealth();
       res.status(health.ok ? 200 : 503).json(health);
@@ -175,6 +223,20 @@ export class RestServer {
       res.json({
         rest: this.metrics,
         app: this.params.app.getMetrics(),
+      });
+    });
+
+    this.expressApp.get('/logs', this.requireAuth('runtime:read'), (req: Request<unknown, unknown, unknown, { limit?: string }>, res: Response) => {
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      res.json({
+        logs: this.params.admin?.getLogs?.(limit) ?? [],
+      });
+    });
+
+    this.expressApp.get('/audit', this.requireAuth('runtime:read'), (req: Request<unknown, unknown, unknown, { limit?: string }>, res: Response) => {
+      const limit = req.query.limit ? Number(req.query.limit) : undefined;
+      res.json({
+        entries: this.params.admin?.getAuditTrail?.(limit) ?? [],
       });
     });
 
@@ -359,13 +421,34 @@ export class RestServer {
         }
 
         try {
-          const state = await this.params.app.command(req.params.id, command, payload);
+          const requestId = this.getRequestId(req);
+          const correlationId = this.getCorrelationId(req, requestId);
+          const state = await this.params.app.command(req.params.id, command, payload, {
+            requestId,
+            correlationId,
+          });
+          this.params.logger?.audit('devices.command', req.params.id, 'success', {
+            command,
+            requestId,
+            correlationId,
+          });
           res.json({ ok: true, state });
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Unknown error';
           if ((message.includes('Unknown device') || message.includes('not found')) && this.params.admin?.routeCommand) {
-            const routed = await this.params.admin.routeCommand(req.params.id, command, payload);
+            const requestId = this.getRequestId(req);
+            const correlationId = this.getCorrelationId(req, requestId);
+            const routed = await this.params.admin.routeCommand(req.params.id, command, payload, {
+              requestId,
+              correlationId,
+            });
             if (routed.ok) {
+              this.params.logger?.audit('devices.command.route', req.params.id, 'success', {
+                command,
+                requestId,
+                correlationId,
+                routedTo: routed.routedTo,
+              });
               res.json({
                 ok: true,
                 state: routed.state,
@@ -374,6 +457,13 @@ export class RestServer {
               return;
             }
           }
+
+          this.params.logger?.audit('devices.command', req.params.id, 'failure', {
+            command,
+            requestId: this.getRequestId(req),
+            correlationId: this.getCorrelationId(req),
+            error: message,
+          });
 
           res.status(400).json({
             ok: false,
@@ -478,8 +568,20 @@ export class RestServer {
       );
     });
 
+    const server = this.server;
+    if (!server) {
+      throw new Error('REST server failed to initialize');
+    }
+
+    server.on('connection', (socket) => {
+      this.sockets.add(socket);
+      socket.on('close', () => {
+        this.sockets.delete(socket);
+      });
+    });
+
     this.websocketServer = new WebSocketServer({
-      server: this.server,
+      server,
       path: this.params.websocket?.path ?? this.params.websocketPath ?? '/ws',
     });
 
@@ -488,6 +590,9 @@ export class RestServer {
       if (!authResult.ok) {
         this.metrics.authFailures += 1;
         this.metrics.websocketRejected += 1;
+        this.params.logger?.audit('auth.websocket', 'ws:connect', 'failure', {
+          error: authResult.error,
+        });
         socket.close(1008, authResult.error);
         return;
       }
@@ -574,9 +679,13 @@ export class RestServer {
         }
         resolve();
       });
+      for (const socket of this.sockets) {
+        socket.destroy();
+      }
     });
 
     this.server = undefined;
+    this.sockets.clear();
   }
 
   isRunning(): boolean {
@@ -664,5 +773,18 @@ export class RestServer {
     }
 
     client.send(message);
+  }
+
+  private getRequestId(req: Request): string {
+    return ((Array.isArray(req.headers['x-request-id']) ? req.headers['x-request-id'][0] : req.headers['x-request-id'])
+      ?? (req as Request & { requestId?: string }).requestId
+      ?? randomUUID()) as string;
+  }
+
+  private getCorrelationId(req: Request, fallback?: string): string {
+    return ((Array.isArray(req.headers['x-correlation-id']) ? req.headers['x-correlation-id'][0] : req.headers['x-correlation-id'])
+      ?? (req as Request & { correlationId?: string }).correlationId
+      ?? fallback
+      ?? this.getRequestId(req)) as string;
   }
 }

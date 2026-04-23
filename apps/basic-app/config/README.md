@@ -1,6 +1,6 @@
 # basic-app cluster configs
 
-Local cluster example files for `0.8.0`:
+Local cluster example files for `0.9.0`:
 
 - `iot.config.cluster.control-plane.json`: control plane on `127.0.0.1:4000`
 - `iot.config.cluster.edge.json`: edge node on `127.0.0.1:3000` that registers into the control plane

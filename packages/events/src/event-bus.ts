@@ -1,5 +1,25 @@
 import { EventEmitter } from 'node:events';
-import { createTimestamp, type EventBusContract } from '@gortjs/contracts';
+import { createTimestamp, type EventBusContract, type EventHistoryEntry } from '@gortjs/contracts';
+
+function normalizeEventEntry(eventName: string, payload: unknown): EventHistoryEntry {
+  const metadata = payload && typeof payload === 'object'
+    ? payload as {
+      timestamp?: string;
+      originNodeId?: string;
+      requestId?: string;
+      correlationId?: string;
+    }
+    : {};
+
+  return {
+    eventName,
+    payload,
+    timestamp: metadata.timestamp ?? createTimestamp(),
+    originNodeId: metadata.originNodeId,
+    requestId: metadata.requestId,
+    correlationId: metadata.correlationId,
+  };
+}
 
 export class EventBus implements EventBusContract {
   private readonly emitter = new EventEmitter();
@@ -24,10 +44,6 @@ export class EventBus implements EventBusContract {
 
   emit(eventName: string, payload: unknown = {}): void {
     this.emitter.emit(eventName, payload);
-    this.emitter.emit('*', {
-      eventName,
-      payload,
-      timestamp: createTimestamp(),
-    });
+    this.emitter.emit('*', normalizeEventEntry(eventName, payload));
   }
 }

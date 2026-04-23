@@ -575,6 +575,44 @@ export function validateAppConfig(
           }
         }
       }
+
+      if (typeof config.runtime.logging !== 'undefined') {
+        if (!isPlainObject(config.runtime.logging)) {
+          issues.push({ path: 'runtime.logging', message: 'must be an object when provided' });
+        } else {
+          if (
+            typeof config.runtime.logging.level !== 'undefined'
+            && !['debug', 'info', 'warn', 'error'].includes(String(config.runtime.logging.level))
+          ) {
+            issues.push({ path: 'runtime.logging.level', message: "must be 'debug', 'info', 'warn', or 'error'" });
+          }
+
+          if (
+            typeof config.runtime.logging.file !== 'undefined'
+            && (typeof config.runtime.logging.file !== 'string' || config.runtime.logging.file.trim() === '')
+          ) {
+            issues.push({ path: 'runtime.logging.file', message: 'must be a non-empty string when provided' });
+          }
+
+          if (
+            typeof config.runtime.logging.auditFile !== 'undefined'
+            && (typeof config.runtime.logging.auditFile !== 'string' || config.runtime.logging.auditFile.trim() === '')
+          ) {
+            issues.push({ path: 'runtime.logging.auditFile', message: 'must be a non-empty string when provided' });
+          }
+
+          if (
+            typeof config.runtime.logging.maxEntries !== 'undefined'
+            && (
+              typeof config.runtime.logging.maxEntries !== 'number'
+              || !Number.isInteger(config.runtime.logging.maxEntries)
+              || config.runtime.logging.maxEntries <= 0
+            )
+          ) {
+            issues.push({ path: 'runtime.logging.maxEntries', message: 'must be a positive integer' });
+          }
+        }
+      }
     }
   }
 

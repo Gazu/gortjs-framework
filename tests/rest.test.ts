@@ -710,3 +710,165 @@ test('WebSocket subscriptions support replay and event filtering for distributed
   socket.close();
   await runtime.dispose();
 });
+
+test('operational endpoints expose liveness, readiness, logs, audit trail, correlation ids, and plugin runtime health', async () => {
+  let pluginStarted = false;
+  let pluginStopped = false;
+  let pluginDisposed = false;
+
+  const plugin: GortPlugin = {
+    manifest: {
+      name: 'ops-plugin',
+      version: '0.9.0',
+      apiVersion: '0.9',
+      capabilities: {
+        drivers: [{ id: 'mock', driverName: 'mock' }],
+      },
+    },
+    register() {
+      return;
+    },
+    start() {
+      pluginStarted = true;
+    },
+    stop() {
+      pluginStopped = true;
+    },
+    dispose() {
+      pluginDisposed = true;
+    },
+    healthCheck() {
+      return {
+        ok: pluginStarted && !pluginDisposed,
+        message: 'plugin operational',
+      };
+    },
+  };
+
+  const runtime = await AppRuntime.fromConfig({
+    runtime: {
+      driver: 'mock',
+      logging: {
+        enabled: true,
+        console: false,
+        maxEntries: 50,
+      },
+    },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+    },
+    plugins: [{ name: 'ops-plugin' }],
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+  }, { plugins: [plugin] });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  const liveResponse = await requestJson(`${rest.getUrl()}/health/live`);
+  assert.equal(liveResponse.status, 200);
+  assert.equal((liveResponse.body as { ok: boolean }).ok, true);
+
+  const readyResponse = await requestJson(`${rest.getUrl()}/health/ready`);
+  assert.equal(readyResponse.status, 200);
+  assert.equal((readyResponse.body as { ok: boolean }).ok, true);
+
+  const correlationResponse = await requestJson(`${rest.getUrl()}/devices/led1/commands`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-request-id': 'req-123',
+      'x-correlation-id': 'corr-123',
+    },
+    body: JSON.stringify({ command: 'on' }),
+  });
+  assert.equal(correlationResponse.status, 200);
+  assert.equal((correlationResponse.body as { ok: boolean }).ok, true);
+
+  const echoedHeaders = await fetch(`${rest.getUrl()}/status`, {
+    headers: {
+      'x-request-id': 'req-123',
+      'x-correlation-id': 'corr-123',
+    },
+  });
+  assert.equal(echoedHeaders.status, 200);
+  assert.equal(echoedHeaders.headers.get('x-request-id'), 'req-123');
+  assert.equal(echoedHeaders.headers.get('x-correlation-id'), 'corr-123');
+  await echoedHeaders.text();
+
+  const eventsResponse = await requestJson(
+    `${rest.getUrl()}/events?eventName=${encodeURIComponent('device:led1:command:executed')}&pageSize=20`,
+  );
+  assert.equal(eventsResponse.status, 200);
+  assert.ok(
+    (eventsResponse.body as { events: Array<{ requestId?: string; correlationId?: string }> }).events.some(
+      (entry) => entry.requestId === 'req-123' && entry.correlationId === 'corr-123',
+    ),
+  );
+
+  const logsResponse = await requestJson(`${rest.getUrl()}/logs?limit=20`);
+  assert.equal(logsResponse.status, 200);
+  assert.ok((logsResponse.body as { logs: Array<{ message: string }> }).logs.some((entry) => entry.message === 'Runtime started'));
+
+  const auditResponse = await requestJson(`${rest.getUrl()}/audit?limit=20`);
+  assert.equal(auditResponse.status, 200);
+  assert.ok((auditResponse.body as { entries: Array<{ action: string; details?: { requestId?: string } }> }).entries.some((entry) => entry.action === 'devices.command' && entry.details?.requestId === 'req-123'));
+
+  const pluginsResponse = await requestJson(`${rest.getUrl()}/plugins`);
+  assert.equal(pluginsResponse.status, 200);
+  assert.equal(
+    (pluginsResponse.body as { plugins: Array<{ runtime?: { state?: string; health?: { ok?: boolean } } }> }).plugins[0]?.runtime?.state,
+    'started',
+  );
+  assert.equal(
+    (pluginsResponse.body as { plugins: Array<{ runtime?: { health?: { ok?: boolean } } }> }).plugins[0]?.runtime?.health?.ok,
+    true,
+  );
+
+  await runtime.dispose();
+  assert.equal(pluginStarted, true);
+  assert.equal(pluginStopped, true);
+  assert.equal(pluginDisposed, true);
+  assert.equal(runtime.getAdmin().getPluginCatalog()[0]?.runtime.state, 'disposed');
+});
+
+test('readiness fails while liveness stays healthy when a node cannot reach its control plane', async () => {
+  const runtime = await AppRuntime.fromConfig({
+    runtime: {
+      driver: 'mock',
+      cluster: {
+        role: 'node',
+        nodeId: 'edge-degraded',
+        controlPlaneUrl: 'http://127.0.0.1:4599',
+        sharedToken: 'cluster-secret',
+      },
+      logging: {
+        enabled: true,
+        console: false,
+      },
+    },
+    rest: {
+      host: '127.0.0.1',
+      port: 0,
+    },
+    devices: [{ id: 'led1', type: 'led', pin: 13 }],
+  });
+
+  await runtime.start();
+  const rest = runtime.getRestServer();
+  assert.ok(rest);
+
+  await sleep(50);
+
+  const liveResponse = await requestJson(`${rest.getUrl()}/health/live`);
+  assert.equal(liveResponse.status, 200);
+  assert.equal((liveResponse.body as { ok: boolean }).ok, true);
+
+  const readyResponse = await requestJson(`${rest.getUrl()}/health/ready`);
+  assert.equal(readyResponse.status, 503);
+  assert.equal((readyResponse.body as { ok: boolean }).ok, false);
+  assert.ok((readyResponse.body as { reasons: string[] }).reasons.includes('Control plane is unreachable'));
+
+  await runtime.dispose();
+});

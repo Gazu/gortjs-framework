@@ -2,7 +2,7 @@
 
 GortJS is a modular IoT framework for JavaScript and TypeScript. It uses a driver-based architecture built around devices and events so you can write your application logic once and run it with real hardware or simulated environments.
 
-Current documented release: `0.8.0`
+Current documented release: `0.9.0`
 
 ## Core idea
 
@@ -20,13 +20,13 @@ Current documented release: `0.8.0`
 - `@gortjs/rest`: REST and WebSocket exposure for a running `IoTApp`.
 - `@gortjs/basic-app`: example application inside the monorepo.
 
-## What changed in 0.8.0
+## What changed in 0.9.0
 
-- Official CLI flows for `templates`, `create`, `scaffold`, `dashboard`, and `compat`.
-- Browser-based runtime inspector at `/inspector` for devices, workflows, events, plugins, metrics, and cluster state.
-- Friendlier plugin SDK helpers through `definePlugin`, `createPluginManifest`, and `defineDriverFactory`.
-- Explicit version and compatibility metadata in runtime summaries.
-- Production-oriented scaffolds and product documentation for faster adoption.
+- Structured runtime logs and audit trail endpoints for operational visibility.
+- Correlation IDs propagated through REST commands and event history.
+- Separate `/health/live` and `/health/ready` endpoints for deployment health probes.
+- Stronger plugin runtime lifecycle with start/stop/dispose hooks and health summaries.
+- CLI operational flows for `logs` and `audit`, on top of the developer tooling introduced in `0.8.0`.
 
 ## Quick start
 
@@ -66,7 +66,7 @@ await runtime.dispose();
 - Run declarative automation rules triggered by device events.
 - Inspect plugin catalogs and scheduled jobs through the admin API or CLI.
 - Move from a single local app to a connected multi-runtime topology with a control plane.
-- Bootstrap new apps and extension points from the official `0.8.0` templates and scaffolds.
+- Bootstrap new apps and extension points from the official templates and scaffolds, then operate them with structured diagnostics.
 
 ## Product docs
 
@@ -75,6 +75,7 @@ await runtime.dispose();
 - [docs/guides/distributed-runtime.md](./docs/guides/distributed-runtime.md)
 - [docs/guides/mock-to-hardware.md](./docs/guides/mock-to-hardware.md)
 - [docs/migration-guides/0.7-to-0.8.md](./docs/migration-guides/0.7-to-0.8.md)
+- [docs/migration-guides/0.8-to-0.9.md](./docs/migration-guides/0.8-to-0.9.md)
 
 ## Package documentation
 

@@ -99,7 +99,7 @@ function createMinimalTemplate(targetName: string): GeneratedFile[] {
     {
       path: 'README.md',
       contents: createBaseReadme(targetName, [
-        'Minimal GortJS app scaffolded for release `0.8.0`.',
+        'Minimal GortJS app scaffolded for release `0.9.0`.',
         '## Run\n\n```bash\nnpm install\nnpm run validate\nnpm run dev\n```',
       ]),
     },
@@ -317,7 +317,7 @@ function createProductionTemplate(targetName: string): GeneratedFile[] {
     {
       path: 'README.md',
       contents: createBaseReadme(targetName, [
-        'Production-oriented GortJS topology scaffold for `0.8.0`.',
+        'Production-oriented GortJS topology scaffold for `0.9.0`.',
         'This example starts with env-backed auth, Redis persistence, a control plane, and one edge node.',
       ]),
     },
@@ -347,6 +347,12 @@ function createProductionTemplate(targetName: string): GeneratedFile[] {
             nodeId: 'control-plane',
             advertisedUrl: 'http://127.0.0.1:4000',
             sharedTokenEnv: 'GORT_CLUSTER_TOKEN',
+          },
+          logging: {
+            enabled: true,
+            console: true,
+            file: './runtime/control-plane.log',
+            auditFile: './runtime/control-plane.audit.jsonl',
           },
           events: {
             adapters: [
@@ -388,6 +394,12 @@ function createProductionTemplate(targetName: string): GeneratedFile[] {
             sharedTokenEnv: 'GORT_CLUSTER_TOKEN',
             remoteCommandRouting: true,
             syncEvents: true,
+          },
+          logging: {
+            enabled: true,
+            console: true,
+            file: './runtime/edge.log',
+            auditFile: './runtime/edge.audit.jsonl',
           },
           events: {
             adapters: [
@@ -495,7 +507,7 @@ const templates: Record<AppTemplateName, TemplateDefinition> = {
 const scaffolds: Record<ScaffoldKind, ScaffoldDefinition> = {
   plugin: {
     kind: 'plugin',
-    description: 'Generate a typed plugin module with the 0.8 plugin SDK helpers.',
+    description: 'Generate a typed plugin module with the 0.9 plugin SDK helpers.',
     files: (name) => {
       const fileName = `${toKebabCase(name)}.ts`;
       const pluginName = toKebabCase(name);

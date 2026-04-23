@@ -5,6 +5,8 @@ export interface TransportEventMessage {
   payload: unknown;
   originNodeId?: string;
   timestamp?: string;
+  requestId?: string;
+  correlationId?: string;
 }
 
 export interface EventHistoryEntry {
@@ -12,6 +14,8 @@ export interface EventHistoryEntry {
   payload: unknown;
   timestamp: string;
   originNodeId?: string;
+  requestId?: string;
+  correlationId?: string;
 }
 
 export interface EventHistoryQuery {
@@ -52,6 +56,8 @@ export interface DeviceEventEnvelope<TPayload = Record<string, unknown>> {
   deviceType: DeviceType;
   payload: TPayload;
   timestamp: string;
+  requestId?: string;
+  correlationId?: string;
 }
 
 export interface EventBusHealth {
@@ -62,6 +68,8 @@ export interface SystemEventEnvelope<TPayload = Record<string, unknown>> {
   source: 'app' | 'board' | 'device';
   payload: TPayload;
   timestamp: string;
+  requestId?: string;
+  correlationId?: string;
 }
 
 export interface KnownEventPayloads {

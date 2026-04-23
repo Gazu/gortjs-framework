@@ -3,6 +3,31 @@ import type { RuntimeEventAdapterStatus } from '../events/event-types';
 import type { LoadedPluginSummary } from '../plugins/plugin-types';
 import type { PluginApiVersion } from '../plugins/plugin-types';
 
+export type RuntimeLogLevel = 'debug' | 'info' | 'warn' | 'error';
+
+export interface RuntimeLogEntry {
+  id: string;
+  timestamp: string;
+  level: RuntimeLogLevel;
+  source: string;
+  message: string;
+  requestId?: string;
+  correlationId?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface RuntimeAuditEntry {
+  id: string;
+  timestamp: string;
+  action: string;
+  resource: string;
+  outcome: 'success' | 'failure';
+  actor?: string;
+  requestId?: string;
+  correlationId?: string;
+  details?: Record<string, unknown>;
+}
+
 export type WorkflowJobKind = 'interval' | 'cron';
 export type WorkflowConcurrencyPolicy = 'allow' | 'forbid' | 'queue';
 export type RuntimeNodeRole = 'standalone' | 'node' | 'control-plane';

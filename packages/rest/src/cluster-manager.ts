@@ -8,6 +8,7 @@ import type {
 } from '@gortjs/contracts';
 import { createTimestamp } from '@gortjs/contracts';
 import type { IoTApp } from '@gortjs/core';
+import type { RuntimeLogger } from './runtime-logger';
 
 type RegisteredNode = RuntimeNodeSummary & {
   devices: DeviceState[];
@@ -28,6 +29,7 @@ export class ClusterManager {
       app: IoTApp;
       config: IoTAppConfig;
       getLocalUrl: () => string | undefined;
+      logger?: RuntimeLogger;
     },
   ) {
     const self = this.buildLocalNodeSummary('local');
@@ -150,7 +152,15 @@ export class ClusterManager {
     }, 150);
   }
 
-  async routeCommand(deviceId: string, command: string, payload: Record<string, unknown> = {}): Promise<{
+  async routeCommand(
+    deviceId: string,
+    command: string,
+    payload: Record<string, unknown> = {},
+    context?: {
+      requestId?: string;
+      correlationId?: string;
+    },
+  ): Promise<{
     ok: boolean;
     state?: unknown;
     routedTo?: string;
@@ -168,7 +178,7 @@ export class ClusterManager {
 
     const response = await fetch(`${target.url}/devices/${encodeURIComponent(deviceId)}/commands`, {
       method: 'POST',
-      headers: this.createJsonHeaders(),
+      headers: this.createJsonHeaders(context),
       body: JSON.stringify({ command, payload }),
     });
 
@@ -296,20 +306,26 @@ export class ClusterManager {
     };
   }
 
-  private createHeaders(): Record<string, string> {
+  private createHeaders(context?: { requestId?: string; correlationId?: string }): Record<string, string> {
     const headers: Record<string, string> = {};
     const token = this.params.config.runtime?.cluster?.sharedToken;
     if (token) {
       headers['x-gort-cluster-token'] = token;
     }
+    if (context?.requestId) {
+      headers['x-request-id'] = context.requestId;
+    }
+    if (context?.correlationId) {
+      headers['x-correlation-id'] = context.correlationId;
+    }
 
     return headers;
   }
 
-  private createJsonHeaders(): Record<string, string> {
+  private createJsonHeaders(context?: { requestId?: string; correlationId?: string }): Record<string, string> {
     return {
       'content-type': 'application/json',
-      ...this.createHeaders(),
+      ...this.createHeaders(context),
     };
   }
 
@@ -317,6 +333,13 @@ export class ClusterManager {
     this.controlPlaneReachable = reachable;
     this.lastControlPlaneSyncAt = createTimestamp();
     this.lastControlPlaneError = error;
+    if (error) {
+      this.params.logger?.warn('cluster', 'Control plane communication degraded', {
+        nodeId: this.getNodeId(),
+        controlPlaneUrl: this.params.config.runtime?.cluster?.controlPlaneUrl,
+        error,
+      });
+    }
   }
 
   private formatError(error: unknown): string {

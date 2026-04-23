@@ -4,7 +4,7 @@ import type { DeviceConfig, DeviceState } from '../devices/device-types';
 import type { EventBusHealth } from '../events/event-types';
 import type { PersistenceConfig, PersistenceHealth } from '../persistence/persistence-types';
 import type { LoadedPluginSummary } from '../plugins/plugin-types';
-import type { ClusterStateSummary, RuntimeNodeRole, RuntimeNodeSummary, RuntimeSummary, WorkflowJobStatus } from '../runtime/runtime-types';
+import type { ClusterStateSummary, RuntimeAuditEntry, RuntimeLogEntry, RuntimeLogLevel, RuntimeNodeRole, RuntimeNodeSummary, RuntimeSummary, WorkflowJobStatus } from '../runtime/runtime-types';
 
 export type IoTAppStatus = 'created' | 'attached' | 'running' | 'stopped' | 'disposed' | 'error';
 export type SupportedDriverName = 'johnny-five' | 'mock';
@@ -65,6 +65,15 @@ export interface RestServerConfig {
   auth?: RestAuthConfig;
 }
 
+export interface RuntimeLoggingConfig {
+  enabled?: boolean;
+  level?: RuntimeLogLevel;
+  console?: boolean;
+  file?: string;
+  auditFile?: string;
+  maxEntries?: number;
+}
+
 export interface RuntimeEventAdapterConfig {
   type: EventAdapterType;
   direction?: EventAdapterDirection;
@@ -109,6 +118,7 @@ export interface IoTRuntimeConfig {
   events?: {
     adapters?: RuntimeEventAdapterConfig[];
   };
+  logging?: RuntimeLoggingConfig;
   cluster?: RuntimeClusterConfig;
 }
 
@@ -155,6 +165,15 @@ export interface IoTAppImportSnapshot {
 
 export interface IoTAppHealth {
   ok: boolean;
+  liveness: {
+    ok: boolean;
+    status: IoTAppStatus;
+  };
+  readiness: {
+    ok: boolean;
+    status: IoTAppStatus;
+    reasons: string[];
+  };
   app: {
     status: IoTAppStatus;
     timeZone?: string;
@@ -188,6 +207,8 @@ export interface RuntimeAdminProvider {
   getPluginCatalog(): LoadedPluginSummary[];
   getRuntimeSummary(): RuntimeSummary;
   getJobs(): WorkflowJobStatus[];
+  getLogs?(limit?: number): RuntimeLogEntry[];
+  getAuditTrail?(limit?: number): RuntimeAuditEntry[];
   getClusterState?(): ClusterStateSummary;
   listClusterNodes?(): RuntimeNodeSummary[];
   registerClusterNode?(node: RuntimeNodeSummary & { devices?: DeviceState[] }): void;
@@ -196,6 +217,10 @@ export interface RuntimeAdminProvider {
     deviceId: string,
     command: string,
     payload?: Record<string, unknown>,
+    context?: {
+      requestId?: string;
+      correlationId?: string;
+    },
   ): Promise<{ ok: boolean; state?: unknown; routedTo?: string; error?: string }>;
   ingestEvent?(eventName: string, payload?: unknown, sourceNodeId?: string): void;
 }
